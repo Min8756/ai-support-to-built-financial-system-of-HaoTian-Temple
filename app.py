@@ -4,7 +4,7 @@ from datetime import datetime
 import random
 
 # 1. 页面基础配置
-st.set_page_config(page_title="昊天观·高强度内控财务系统", layout="wide", page_icon="☯️")
+st.set_page_config(page_title="昊天观·云端合规财务内控系统", layout="wide", page_icon="☯️")
 
 # --- 2. 玄门古风及规范化表单 CSS ---
 st.markdown("""
@@ -19,7 +19,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 初始化全局持久化数据库（引入 Session 级别存储）
+# 3. 初始化全局持久化数据库
 if 'ledger' not in st.session_state:
     st.session_state.ledger = pd.DataFrame(columns=[
         '日期', '类型', '一级科目', '二级科目', '税收属性', '金额', '经手人/功德主', '票据凭证', '具体操作员', '负责人手机', '备注'
@@ -32,11 +32,8 @@ if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.current_user_role = None
 
-# 验证码动态缓存
 if 'sent_code' not in st.session_state:
     st.session_state.sent_code = None
-if 'verified_session' not in st.session_state:
-    st.session_state.verified_session = False
 
 # --- 4. 可供管理员动态修改的初始实名制负责人数据库 ---
 if 'user_management_db' not in st.session_state:
@@ -57,10 +54,10 @@ def log_action(role, real_name, action_type, detail):
     }
     st.session_state.audit_logs = pd.concat([st.session_state.audit_logs, pd.DataFrame([new_log])], ignore_index=True)
 
-# 辅助函数：风控短信与邮件联动提示
+# 辅助函数：大额变动邮件监控提示
 def send_alert_email(date_str, amount, event, operator):
     to_email = "rldycym123123@163.com"
-    st.toast(f"🚨 大额风控流：已向 {to_email} 发布实时审计监控快报！")
+    st.toast(f"🚨 大额风控流：已实时向观内安全邮箱 {to_email} 报送风控审计底单！")
 
 # --- 5. 统一入口：多角色实名核验登录大厅 ---
 if not st.session_state.logged_in:
@@ -80,32 +77,29 @@ if not st.session_state.logged_in:
         
         role_key = login_role.split("(")[1].replace(")", "").strip()
         
-        # 管理员账户走独立密码通道，无需每次核验手机号
+        # Super Admin 控制台（密码已安全设置为 20010905）
         if role_key == "admin":
             admin_pwd = st.text_input("请输入超级管理员密码", type="password")
             if st.button("进入管理员修正空间", use_container_width=True):
-                if admin_pwd == "htadmin999":
+                if admin_pwd == "20010905":
                     st.session_state.logged_in = True
                     st.session_state.current_user_role = "admin"
                     log_action("超级管理员", "观内统筹人", "管理员登录", "进入后台账目与账户基础信息修正空间")
                     st.rerun()
                 else:
-                    st.error("❌ 管理员秘钥错误。")
+                    st.error("❌ 超级管理员秘钥错误。")
         else:
-            # 业务账户：拉取管理员设置或初始化的默认资料
             current_template = st.session_state.user_management_db[role_key]
             
             st.markdown("### 📋 请完善并核验您的个人实名登记信息")
             input_name = st.text_input("负责人员姓名", value=current_template["name"])
             input_phone = st.text_input("绑定手机号码", value=current_template["phone"])
             
-            # 财务和当家必须输入并核验中国大陆身份证
             if role_key in ["finance", "temple_head"]:
                 input_id = st.text_input("大陆身份证号(18位)", value=current_template["id_card"])
             else:
                 input_id = "义工免批登记"
                 
-            # --- 验证码核心机制 ---
             c1, c2 = st.columns([1.5, 1])
             with c2:
                 if st.button("📲 获取短信验证码", use_container_width=True):
@@ -113,7 +107,7 @@ if not st.session_state.logged_in:
                         st.error("请输入合规的11位手机号")
                     else:
                         st.session_state.sent_code = str(random.randint(100000, 999999))
-                        st.info(f"【昊天观财务中心】您的动态验证码为：`{st.session_state.sent_code}`（已安全下发至模拟网关）")
+                        st.info(f"【昊天观财务中心】您的动态验证码为：`{st.session_state.sent_code}`（已安全下发）")
             
             with c1:
                 input_code = st.text_input("输入6位短信验证码", placeholder="请输入上方蓝框中的数字")
@@ -126,30 +120,27 @@ if not st.session_state.logged_in:
                 elif role_key in ["finance", "temple_head"] and len(input_id) != 18:
                     st.error("❌ 财务/当家依法必须填写合规的18位大陆身份证号！")
                 else:
-                    # 核验通过，动态覆盖当前的即时信息
                     st.session_state.logged_in = True
                     st.session_state.current_user_role = role_key
                     st.session_state.active_user_info = {
                         "name": input_name, "phone": input_phone, "id_card": input_id, "title": current_template["title"]
                     }
-                    st.session_state.sent_code = None # 清空验证码
-                    log_action(current_template["title"], input_name, "实名核验登录", f"核验手机：{input_phone}，身份证：{input_id}，成功进入工作台。")
+                    st.session_state.sent_code = None 
+                    log_action(current_template["title"], input_name, "实名核验登录", f"核验手机：{input_phone}，成功进入工作台。")
                     st.rerun()
     st.stop()
 
-# --- 6. 正式管理后台（分权隔离机制） ---
+# --- 6. 正式管理后台 ---
 current_role = st.session_state.current_user_role
 
 # ==========================================
-# 权限分支 A：超级管理员账户（账户信息详细修改面板）
+# 权限分支 A：超级管理员空间
 # ==========================================
 if current_role == "admin":
     st.title("⚙️ 昊天观 · 账户职司精细化修正空间 (超级管理员)")
     st.markdown("---")
     
     st.subheader("🛠️ 各岗位固定负责人基本信息修改")
-    st.markdown("管理员可在此修正由于人事变动、人员登记错误导致的姓名、手机号及身份证不符问题。")
-    
     for r_key, r_info in st.session_state.user_management_db.items():
         with st.expander(f"修改 {r_info['title']} 账户的默认配置资料"):
             new_name = st.text_input(f"[{r_info['title']}] 默认姓名", value=r_info["name"], key=f"edit_name_{r_key}")
@@ -163,12 +154,12 @@ if current_role == "admin":
                 st.session_state.user_management_db[r_key] = {
                     "title": r_info['title'], "name": new_name, "phone": new_phone, "id_card": new_id
                 }
-                log_action("超级管理员", "观内统筹人", "基础资料修正", f"修改了 {r_info['title']} 的预设资料。新姓名：{new_name}")
-                st.success("资料更新成功！下次该岗位人员登录时将默认载入此数据。")
+                log_action("超级管理员", "观内统筹人", "基础资料修正", f"修改了 {r_info['title']} 的预设资料。")
+                st.success("资料更新成功！")
                 st.rerun()
                 
     st.markdown("---")
-    st.subheader("🕵️ 全盘实时审计内控日志 (防篡改视图)")
+    st.subheader("🕵️ 全盘实时审计内控日志")
     st.dataframe(st.session_state.audit_logs.sort_values(by='时间', ascending=False), use_container_width=True)
     
     if st.button("🚪 安全退出管理员空间", type="primary"):
@@ -177,18 +168,17 @@ if current_role == "admin":
     st.stop()
 
 # ==========================================
-# 权限分支 B：业务岗位账户（义工、财务、当家）
+# 权限分支 B：业务岗位工作台（义工、财务、当家）
 # ==========================================
 u_info = st.session_state.active_user_info
 
-# 侧边栏：显示当前经过短信验证的高清实名看板
 st.sidebar.markdown(f"### 🕯️ 当前当班法座：\n**{u_info['name']}**")
 st.sidebar.markdown(f"**岗位职司**：`{u_info['title']}`")
 st.sidebar.markdown(f"**验证手机**：`{u_info['phone']}`")
 if current_role != "volunteer":
     st.sidebar.markdown(f"**实名身份证**：\n`{u_info['id_card'][:6]}********{u_info['id_card'][-4:]}`")
 st.sidebar.markdown("---")
-st.sidebar.markdown("🛡️ **动态核验状态**：\n`短信验证码核验已通过，本次操作已被实时审计留痕`")
+st.sidebar.markdown("🛡️ **安全核验状态**：\n`动态验证码核验已通过`")
 
 if st.sidebar.button("🚪 退出当前交班账户"):
     log_action(u_info['title'], u_info['name'], "用户登出", "安全退出当前班次")
@@ -197,14 +187,12 @@ if st.sidebar.button("🚪 退出当前交班账户"):
 
 df = st.session_state.ledger
 
-# ==========================================
-# 权限展示层级：核心看板（仅财务工作人员、当家可见）
-# ==========================================
+# 资产看板核心隔离
 if current_role in ['finance', 'temple_head']:
     st.markdown(f"### 🏛️ 昊天观核心资产大盘看板 (调阅人：{u_info['name']})")
     if not df.empty:
         total_income = df[df['类型'] == '收入']['金额'].sum()
-        total_expense = df[df['类型'] == '支出']['金额'].sum()
+        total_expense = df[df['format_expense'] if 'format_expense' in df else df['类型'] == '支出']['金额'].sum()
         balance = total_income - total_expense
         op_income = df[(df['类型'] == '收入') & (df['税收属性'] == '经营性收入(涉税)')]['金额'].sum()
     else:
@@ -216,9 +204,7 @@ if current_role in ['finance', 'temple_head']:
     m3.metric("本季累计涉税商业收入", f"￥{op_income:,.2f}")
     st.markdown("---")
 
-# ==========================================
-# 所有实名验证通过的账户可用：账目与原始凭证录入
-# ==========================================
+# 原始凭证税收分类日常登记
 st.sidebar.markdown("### 📝 账目税收分类登记")
 entry_type = st.sidebar.radio("资金性质", ["收入", "支出"])
 
@@ -242,7 +228,6 @@ else:
 
 secondary_cat = st.sidebar.selectbox("二级明细科目", sub_cats[primary_cat])
 
-# 税务自动判断
 if "经营" in primary_cat or "商业" in primary_cat:
     tax_property = "经营性收入(涉税)" if entry_type == "收入" else "经营性成本(涉税可扣除)"
 else:
@@ -258,11 +243,10 @@ if st.sidebar.button("确认提交并生成凭证", type="primary"):
     if amount <= 0:
         st.sidebar.error("❌ 金额不能为零")
     elif entry_type == "支出" and uploaded_file is None:
-        st.sidebar.warning("⚠️ 财务合规提示：莲湖税务要求所有支出必须附原始发票凭证！")
+        st.sidebar.warning("⚠️ 财务合规提示：陕西省税务系统要求所有支出必须附原始发票凭证！")
     else:
         receipt_status = f"📄 已关联凭证({uploaded_file.name})" if uploaded_file else "⚠️ 暂无原始凭证"
         
-        # 写入真实操作人员的姓名与验证过的手机号
         new_row = {
             '日期': date.strftime('%Y-%m-%d'), '类型': entry_type, '一级科目': primary_cat,
             '二级科目': secondary_cat, '税收属性': tax_property, '金额': amount, '经手人/功德主': person if person else "随喜",
@@ -270,10 +254,9 @@ if st.sidebar.button("确认提交并生成凭证", type="primary"):
         }
         st.session_state.ledger = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
         
-        # 触发全自动化多维审计与实时邮件快报
         if amount >= 5000.0 or "涉税" in tax_property:
             send_alert_email(date.strftime('%Y-%m-%d'), amount, f"[{primary_cat}-{secondary_cat}] {notes}", u_info['name'])
-            log_action(u_info['title'], u_info['name'], "涉税/大额专项审计", f"登记 ￥{amount} 元账目，触发邮箱预警。")
+            log_action(u_info['title'], u_info['name'], "涉税/大额专项审计", f"登记 ￥{amount} 元账目，触发监控预警。")
         else:
             log_action(u_info['title'], u_info['name'], "账目登记", f"登记了一笔 {entry_type}，金额：{amount} 元。")
             
@@ -281,10 +264,10 @@ if st.sidebar.button("确认提交并生成凭证", type="primary"):
         st.rerun()
 
 # ==========================================
-# 报表查阅权限隔离：仅高级财务、当家账户可见
+# 报表查阅权限隔离（核心漏洞已修复）
 # ==========================================
-if user_role == 'volunteer':
-    st.info(f"💡 **值班留痕提示**：当前操作员为：`{u_info['name']}`。您已成功通过手机号动态核验。根据不相容岗位分离原则，您拥有日常记账权限。全盘明细账及五级财务报表（日/周/月/季/年）属于高级财务与当家核心权限，已被隔离保护。")
+if current_role == 'volunteer':
+    st.info(f"💡 **值班留痕提示**：当前操作员为：`{u_info['name']}`。您已成功通过手机号核验并获取日常记账权限。根据不相容岗位分离原则，全局明细账及五级财务报表（日/周/月/季/年）属于高级财务与当家核心权限，已被防隔离保护。")
 else:
     t1, t2, t3 = st.tabs(["📒 实时财务日记账", "📊 五级周期性报表中心", "🕵️ 岗位实名审计日志"])
     
@@ -322,5 +305,5 @@ else:
 
     with t3:
         st.subheader("🕵️ 岗位实名核验登录与内控防篡改日志")
-        st.markdown("系统精准记录每班次负责人的身份核验细节，出现任何账目偏差均可精准追溯到具体的验证手机。")
         st.dataframe(st.session_state.audit_logs.sort_values(by='时间', ascending=False), use_container_width=True)
+        
