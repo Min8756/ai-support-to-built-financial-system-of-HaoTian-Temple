@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 import random
 
-# 1. 页面基础配置：固定浏览器页签标题为指定名称
+# 1. 页面基础配置：固定浏览器页签标题
 st.set_page_config(page_title="昊天观财务管理系统", layout="wide", page_icon="☯️")
 
 # --- 2. 玄门古风及规范化表单 CSS ---
@@ -48,7 +48,7 @@ if 'user_db' not in st.session_state:
             "password": "ht456", "role": "finance", "title": "财务工作人员账号",
             "name": "张会计", "phone": "13911112222", "id_card": "610104198505125678"
         },
-        "temple_head": {
+        "haotianguan": {  # 已成功将原 temple_head 修改为 haotianguan
             "password": "ht789", "role": "temple_head", "title": "当家/监院账号",
             "name": "李住持", "phone": "13566668888", "id_card": "610104197001019999"
         }
@@ -79,7 +79,7 @@ if not st.session_state.logged_in:
     with col2:
         st.markdown("<div style='background-color: #FFF8DC; padding: 15px; border-radius: 10px; border: 1px solid #8B4513;'><b>🔒 系统安全登录口</b></div>", unsafe_allow_html=True)
         
-        input_user = st.text_input("登录账号", placeholder="volunteer / finance / temple_head / admin")
+        input_user = st.text_input("登录账号", placeholder="volunteer / finance / haotianguan / admin")
         input_pwd = st.text_input("登录密码", type="password")
         
         if st.button("安全验证，登录后台", use_container_width=True):
@@ -126,7 +126,7 @@ if current_role == "admin":
     st.subheader("👥 核心职司账户与具体负责人对应登记表")
     st.markdown("根据审计合规要求，请在此处将固定账户（财务、当家）精准绑定到具体负责人的姓名、大陆身份证、手机号。")
     
-    for u_key in ["finance", "temple_head"]:
+    for u_key in ["finance", "haotianguan"]:
         u_data = st.session_state.user_db[u_key]
         with st.expander(f"⚙️ 更改与管理岗位: {u_key}"):
             edit_pwd = st.text_input(f"登录密码修改", value=u_data["password"], key=f"pwd_{u_key}")
@@ -141,7 +141,7 @@ if current_role == "admin":
                     st.error("❌ 负责人手机号必须为11位！")
                 else:
                     st.session_state.user_db[u_key] = {
-                        "password": edit_pwd, "role": u_key, "title": u_data["title"],
+                        "password": edit_pwd, "role": "finance" if u_key == "finance" else "temple_head", "title": u_data["title"],
                         "name": edit_name, "phone": edit_phone, "id_card": edit_id
                     }
                     log_action("admin", "超级管理员", "账户绑定调整", f"已成功将账户【{u_key}】绑定到负责人：{edit_name}")
@@ -269,7 +269,7 @@ entry_type = st.sidebar.radio("资金性质", ["收入", "支出"])
 if entry_type == "收入":
     primary_cat = st.sidebar.selectbox("一级科目", ["捐赠收入(非经营)", "宗教活动收入(非经营)", "生产经营收入(经营性)", "其他收入"])
     sub_cats = {
-        "捐赠收入(非经营)": ["信众随喜功功德款", "专项定向捐赠"],
+        "捐赠收入(非经营)": ["信众随喜功德款", "专项定向捐赠"],
         "宗教活动收入(非经营)": ["法会斋醮收入", "日常祈福消灾"],
         "生产经营收入(经营性)": ["文创香烛法物销售", "宫观宫殿房屋出租"],
         "其他收入": ["银行利息收入", "其他合法自筹"]
