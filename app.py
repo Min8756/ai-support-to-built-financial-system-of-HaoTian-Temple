@@ -18,7 +18,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 初始化全局数据库（含税务标签属性）
+# 3. 初始化全局数据库
 if 'ledger' not in st.session_state:
     st.session_state.ledger = pd.DataFrame(columns=[
         '日期', '类型', '一级科目', '二级科目', '税收属性', '金额', '经手人/功德主', '票据凭证', '操作员', '备注'
@@ -31,7 +31,7 @@ if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.current_user = None
 
-# --- 4. 账号及负责人对应数据库（西安莲湖区合规实名版） ---
+# --- 4. 账号及负责人数据库（西安莲湖区实名认证版） ---
 USER_DB = {
     "volunteer": {
         "password": "ht123", "role": "volunteer", "name": "李居士(值班义工)", 
@@ -57,10 +57,10 @@ def log_action(username, action_type, detail):
     }
     st.session_state.audit_logs = pd.concat([st.session_state.audit_logs, pd.DataFrame([new_log])], ignore_index=True)
 
-# 辅助函数：大额支出及涉税异常实时邮件弹窗提示
+# 辅助函数：大额变动及涉税异常邮件弹窗提示
 def send_alert_email(date_str, amount, event, operator, tax_type=""):
     to_email = "rldycym123123@163.com"
-    st.toast(f"🚨 莲湖税风控提醒：大额支出/重要涉税变动已向 {to_email} 发送实时监控邮件！")
+    st.toast(f"🚨 莲湖税风控提醒：重要财务变动已实时向 {to_email} 发送风控邮件！")
 
 # --- 5. 安全登录系统 ---
 if not st.session_state.logged_in:
@@ -113,7 +113,6 @@ if user['role'] in ['finance', 'temple_head']:
         total_income = df[df['类型'] == '收入']['金额'].sum()
         total_expense = df[df['类型'] == '支出']['金额'].sum()
         balance = total_income - total_expense
-        # 税务穿透计算
         op_income = df[(df['类型'] == '收入') & (df['税收属性'] == '经营性收入(涉税)')]['金额'].sum()
         non_op_income = df[(df['类型'] == '收入') & (df['税收属性'] == '非经营性收入(免税)')]['金额'].sum()
     else:
@@ -138,8 +137,11 @@ if entry_type == "收入":
         "捐赠收入(非经营)": ["信众随喜功德款", "专项定向捐赠"],
         "宗教活动收入(非经营)": ["法会斋醮收入", "日常祈福消灾"],
         "生产经营收入(经营性)": ["文创香烛法物销售", "宫观门面房屋出租"],
-        "其他收入": ["银行利息收入", "其他合法自筹"]
+        "other_inc": ["银行利息收入", "其他合法自筹"]
     }
+    # 针对其他收入做映射
+    actual_primary = "其他收入" if primary_cat == "其他收入" else primary_cat
+    actual_sub_key = "other_inc" if primary_cat == "其他收入" else primary_cat
 else:
     primary_cat = st.sidebar.selectbox("一级科目", ["日常开支", "宗教活动支出", "修缮工程支出", "人员单费/劳务", "经营性商业成本"])
     sub_cats = {
@@ -149,11 +151,13 @@ else:
         "人员单费/劳务": ["常住道众单费", "雇佣常工/义工劳务补助"],
         "经营性商业成本": ["文创流通处采购进货款", "经营场所物业税费支出"]
     }
+    actual_primary = primary_cat
+    actual_sub_key = primary_cat
 
-secondary_cat = st.sidebar.selectbox("二级明细科目", sub_cats[primary_cat])
+secondary_cat = st.sidebar.selectbox("二级明细科目", sub_cats[actual_sub_key])
 
-# 【核心税收逻辑自动判断】
-if "经营" in primary_cat or "商业" in primary_cat:
+# 税务系统自动判定属性
+if "经营" in actual_primary or "商业" in actual_primary:
     tax_property = "经营性收入(涉税)" if entry_type == "收入" else "经营性成本(涉税可扣除)"
 else:
     tax_property = "非经营性收入(免税)" if entry_type == "收入" else "非经营性日常开支(免税)"
@@ -174,15 +178,15 @@ if st.sidebar.button("确认提交并生成凭证", type="primary"):
     else:
         receipt_status = f"📄 已关联凭证({uploaded_file.name})" if uploaded_file else "⚠️ 暂无原始凭证"
         new_row = {
-            '日期': date.strftime('%Y-%m-%d'), '类型': entry_type, '一级科目': primary_cat,
+            '日期': date.strftime('%Y-%m-%d'), '类型': entry_type, '一级科目': actual_primary,
             '二级科目': secondary_cat, '税收属性': tax_property, '金额': amount, '经手人/功德主': person if person else "随喜",
             '票据凭证': receipt_status, '操作员': user['name'], '备注': notes
         }
         st.session_state.ledger = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
         
-        # 核心功能：大额变动或涉税动作实时向指定邮箱发送邮件
+        # 实时风控触发
         if amount >= 5000.0 or "涉税" in tax_property:
-            send_alert_email(date.strftime('%Y-%m-%d'), amount, f"[{primary_cat}-{secondary_cat}] {notes}", user['name'], tax_property)
+            send_alert_email(date.strftime('%Y-%m-%d'), amount, f"[{actual_primary}-{secondary_cat}] {notes}", user['name'], tax_property)
             log_action(user['name'], "税务与大额审计风控", f"变动 ￥{amount} 元({tax_property})，已实时邮件备案。")
         else:
             log_action(user['name'], "账目登记", f"成功登记一笔 {entry_type} 账目，金额：{amount} 元。")
@@ -191,7 +195,7 @@ if st.sidebar.button("确认提交并生成凭证", type="primary"):
         st.rerun()
 
 # ==========================================
-# 权限层级 2：五级财务报表与莲湖区税务专项报告中心（仅高级财务、当家可见）
+# 权限层级 2：五级财务报表（仅高级财务、当家可见）
 # ==========================================
 if user['role'] == 'volunteer':
     st.info("💡 **合规提示**：您当前的权限为‘值班登记居士’。根据不相容岗位分离原则，多级税务周期报表专属于高级财务及当家法座查阅，感谢您的发心！")
@@ -210,15 +214,42 @@ else:
         if df.empty:
             st.warning("暂无数据用以生成财务报告。")
         else:
-            df['日期'] = pd.to_datetime(df['日期'])
+            df['parsed_date'] = pd.to_datetime(df['日期'])
             report_type = st.selectbox("请选择要调阅的报表周期：", ["日记账汇总", "周报表", "月报表", "季度报表", "年度决算报表"])
             
+            # 安全稳定的报表生成机制
             if report_type == "日记账汇总":
                 summary = df.groupby(['日期', '类型'])['金额'].sum().reset_index()
             elif report_type == "周报表":
-                df['周次'] = df['日期'].dt.isocalendar().week
+                df['周次'] = df['parsed_date'].dt.isocalendar().week
                 summary = df.groupby(['周次', '一级科目', '类型'])['金额'].sum().reset_index()
             elif report_type == "月报表":
-                df['月份'] = df['日期'].dt.to_period('M')
+                df['月份'] = df['parsed_date'].dt.to_period('M').astype(str)
                 summary = df.groupby(['月份', '一级科目', '类型'])['金额'].sum().reset_index()
-            elif report_type == "
+            elif report_type == "季度报表":
+                df['季度'] = df['parsed_date'].dt.to_period('Q').astype(str)
+                summary = df.groupby(['季度', '一级科目', '类型'])['金额'].sum().reset_index()
+            else:
+                df['年度'] = df['parsed_date'].dt.year
+                summary = df.groupby(['年度', '一级科目', '类型'])['金额'].sum().reset_index()
+                
+            st.dataframe(summary)
+
+    with t3:
+        st.subheader("⚖️ 适用于西安市莲湖区税务申报专项数据测算")
+        if df.empty:
+            st.write("暂无涉税经营数据。")
+        else:
+            tax_income_df = df[df['税收属性'] == '经营性收入(涉税)']
+            total_tax_income = tax_income_df['金额'].sum()
+            
+            st.metric("本期累计应税收入额(增值税基数)", f"￥{total_tax_income:,.2f}")
+            if total_tax_income > 0:
+                st.warning("💡 **财务审核风控提示**：请确保商业流通处依法开具发票，并依季在陕西省电子税务局申报。")
+                st.dataframe(tax_income_df)
+            else:
+                st.success("✅ 本期无商业经营收入，本季度在陕西电子税务局进行零申报即可。")
+
+    with t4:
+        st.subheader("🕵️ 昊天观·安全实名审计日志")
+        st.dataframe(st.session_state.audit_logs.sort_values(by='时间', ascending=False), use_container_width=True)
