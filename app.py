@@ -2,84 +2,190 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# 页面基础配置
-st.set_page_config(page_title="昊天庙云端财务管理系统", layout="wide", page_icon="🕌")
-st.title("🕌 昊天庙·云端财务管理系统")
-st.markdown("---")
+# 1. 页面基础配置 (道教古风图标与标题)
+st.set_page_config(page_title="昊天庙·云端财务管理系统", layout="wide", page_icon="☯️")
 
-# 初始化本地测试数据（如果初次运行）
+# --- 2. 注入道教风格自定义 CSS ---
+st.markdown("""
+    <style>
+    /* 全局背景色：宣纸古色 */
+    .stApp {
+        background-color: #FDF5E6;
+        color: #2F2F2F;
+    }
+    /* 侧边栏样式 */
+    [data-testid="stSidebar"] {
+        background-color: #F5F5DC;
+        border-right: 2px solid #8B4513;
+    }
+    /* 标题样式：朱砂红 */
+    h1, h2, h3 {
+        color: #8B0000 !important;
+        font-family: 'Kaiti', 'STKaiti', 'serif';
+    }
+    /* 指标看板样式 */
+    [data-testid="stMetricValue"] {
+        color: #B8860B !important;
+    }
+    /* 按钮样式：道袍深蓝/朱红 */
+    .stButton>button {
+        background-color: #8B0000;
+        color: white;
+        border-radius: 5px;
+        border: 1px solid #D2691E;
+    }
+    .stButton>button:hover {
+        background-color: #A52A2A;
+        border: 1px solid #FFD700;
+    }
+    /* 警告与成功信息样式 */
+    .stAlert {
+        background-color: #FFF8DC;
+        border: 1px solid #D2691E;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# 3. 模拟内置账号数据库 (分级管理)
+USER_DB = {
+    "volunteer": {"password": "ht123", "role": "volunteer", "name": "值班居士"},
+    "finance": {"password": "ht456", "role": "finance", "name": "财务会计/出纳"},
+    "temple_head": {"password": "ht789", "role": "temple_head", "name": "监院/住持"}
+}
+
+# 4. 初始化 Session State
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.user_role = None
+    st.session_state.user_name = None
+
 if 'ledger' not in st.session_state:
-    st.session_state.ledger = pd.DataFrame(columns=['日期', '类型', '科目分类', '金额', '功德主/经手人', '备注'])
+    st.session_state.ledger = pd.DataFrame(columns=['日期', '类型', '科目分类', '金额', '经手人/功德主', '票据凭证', '操作员', '备注'])
 
-# 1. 核心看板数据计算
-df = st.session_state.ledger
-if not df.empty:
-    total_income = df[df['类型'] == '收入']['金额'].sum()
-    total_expense = df[df['类型'] == '支出']['金额'].sum()
-else:
-    total_income = 0.0
-    total_expense = 0.0
-balance = total_income - total_expense
+# --- 5. 登录界面 (太极引导) ---
+if not st.session_state.logged_in:
+    st.markdown("<h1 style='text-align: center;'>☯️ 昊天庙 · 云端财务管理系统</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #555;'>清净财务 · 法财相须 · 合规管理</p>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 1.2, 1])
+    with col2:
+        st.markdown("""
+            <div style='background-color: #FFF8DC; padding: 20px; border-radius: 15px; border: 2px solid #8B4513;'>
+                <h3 style='text-align: center;'>用户验明正身</h3>
+            </div>
+        """, unsafe_allow_html=True)
+        username = st.text_input("账号", placeholder="volunteer / finance / temple_head")
+        password = st.text_input("密码", type="password")
+        
+        if st.button("进入系统", use_container_width=True):
+            if username in USER_DB and USER_DB[username]["password"] == password:
+                st.session_state.logged_in = True
+                st.session_state.user_role = USER_DB[username]["role"]
+                st.session_state.user_name = USER_DB[username]["name"]
+                st.rerun()
+            else:
+                st.error("❗ 账号或密码有误，请重新输入。")
+    st.stop()
 
-# 顶部看板展示
-col1, col2, col3 = st.columns(3)
-col1.metric("📊 总收入 (元)", f"{total_income:,.2f}")
-col2.metric("🔻 总支出 (元)", f"{total_expense:,.2f}")
-col3.metric("💰 账面当前结余 (元)", f"{balance:,.2f}")
+# --- 6. 进入正式系统 ---
+
+# 侧边栏：用户信息与登出
+st.sidebar.markdown(f"### 🕯️ 欢迎：{st.session_state.user_name}")
+st.sidebar.markdown(f"当前职司：`{st.session_state.user_role}`")
+if st.sidebar.button("登出系统"):
+    st.session_state.logged_in = False
+    st.rerun()
+
+st.markdown(f"## 📜 昊天庙 · 财务管理系统")
 st.markdown("---")
 
-# 2. 侧边栏录入功能
-st.sidebar.header("📥 新增收支登记")
-entry_type = st.sidebar.radio("请选择账目类型：", ["收入", "支出"])
+# 数据提取
+df = st.session_state.ledger
 
-# 固定科目定义
-income_cats = ["捐赠性收入", "宗教活动收入", "功德箱收入"]
-expense_cats = ["场所日常维护", "场所建设与修缮", "教职人员单费与劳务报酬", "工作人员工资性收入"]
+# ==========================================
+# 权限层级 A：负责人视图 (负责人/住持专属看板)
+# ==========================================
+if st.session_state.user_role == "temple_head":
+    st.markdown("### 🏛️ 法财具足 · 宏观看板")
+    if not df.empty:
+        total_income = df[df['类型'] == '收入']['金额'].sum()
+        total_expense = df[df['类型'] == '支出']['金额'].sum()
+        balance = total_income - total_expense
+    else:
+        total_income, total_expense, balance = 0.0, 0.0, 0.0
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("累计功德(总收入)", f"￥{total_income:,.2f}")
+    m2.metric("清净支用(总支出)", f"￥{total_expense:,.2f}")
+    m3.metric("当前余利(结余)", f"￥{balance:,.2f}")
+    st.markdown("---")
+
+# ==========================================
+# 权限层级 B：所有角色共用：登记录入区
+# ==========================================
+st.sidebar.markdown("### 📝 账目录入")
+entry_type = st.sidebar.radio("账目性质", ["收入", "支出"])
+
+# 符合法规的道教场所科目
+income_cats = ["捐赠收入(功德款)", "宗教活动收入(法会)", "生产经营收入(文创)", "其他收入"]
+expense_cats = ["日常开支(水电维修)", "宗教活动支出", "修缮工程支出", "人员单费/劳务", "其他支出"]
 categories = income_cats if entry_type == "收入" else expense_cats
 
-# 录入表单
 date = st.sidebar.date_input("日期", datetime.now())
-category = st.sidebar.selectbox("科目分类", categories)
-amount = st.sidebar.number_input("金额 (元)", min_value=0.0, step=100.0, format="%.2f")
-person = st.sidebar.text_input("功德主 / 经手人")
-notes = st.sidebar.text_area("备注信息")
+category = st.sidebar.selectbox("科目", categories)
+amount = st.sidebar.number_input("金额 (元)", min_value=0.0, format="%.2f")
+person = st.sidebar.text_input("经手人/功德主", placeholder="默认随喜")
 
-if st.sidebar.button("确认记账并保存", type="primary"):
+# 票据上传功能
+st.sidebar.markdown("### 📸 票据凭证上传")
+uploaded_file = st.sidebar.file_uploader("拍摄或上传收据/发票", type=["jpg", "png", "pdf"])
+
+notes = st.sidebar.text_area("备注/资金详细用途")
+
+if st.sidebar.button("提交存档", type="primary"):
     if amount <= 0:
-        st.sidebar.error("请输入有效的金额！")
+        st.sidebar.error("金额无效")
+    elif entry_type == "支出" and uploaded_file is None:
+        st.sidebar.warning("⚠️ 依规：所有支出需附原始凭证图片。")
     else:
-        new_data = {
+        receipt_status = f"✅ 已存 ({uploaded_file.name})" if uploaded_file else "❌ 无票据"
+        new_row = {
             '日期': date.strftime('%Y-%m-%d'),
             '类型': entry_type,
             '科目分类': category,
             '金额': amount,
-            '功德主/经手人': person if person else "随喜",
+            '经手人/功德主': person if person else "随喜",
+            '票据凭证': receipt_status,
+            '操作员': st.session_state.user_name,
             '备注': notes
         }
-        st.session_state.ledger = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
-        st.sidebar.success("记账成功！")
+        st.session_state.ledger = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        st.sidebar.success("存档成功！")
         st.rerun()
 
-# 3. 主界面图表与历史明细表格
-st.subheader("📋 财务流水明细与分析")
+# ==========================================
+# 权限层级 C：明细查看权限隔离
+# ==========================================
 
-if st.session_state.ledger.empty:
-    st.info("💡 当前暂无财务数据，请在左侧边栏登记第一笔收支。")
+if st.session_state.user_role == "volunteer":
+    st.info("💡 **居士提示**：您目前的权限为‘值班登记’。为了场所财务清静与安全，录入明细由财务及负责人复核，您当前不可查看历史总表。")
+
 else:
-    # 展示明细表格
-    st.dataframe(st.session_state.ledger, use_container_width=True)
-    
-    # 导出功能
-    csv = st.session_state.ledger.to_csv(index=False).encode('utf-8-sig')
-    st.download_button(
-        label="📥 导出财务流水为 Excel/CSV 文件",
-        data=csv,
-        file_name=f"昊天庙财务流水_{datetime.now().strftime('%Y%m%d')}.csv",
-        mime='text/csv'
-    )
-    
-    # 简单的图表分析
-    st.markdown("---")
-    st.subheader("📊 收支结构比例分析")
-    chart_data = st.session_state.ledger.groupby(['科目分类'])['金额'].sum().reset_index()
-    st.bar_chart(data=chart_data, x='科目分类', y='金额', use_container_width=True)
+    st.markdown("### 📒 财务明细审计表 (复核视图)")
+    if df.empty:
+        st.write("暂无记录。")
+    else:
+        # 显示表格
+        st.dataframe(df, use_container_width=True)
+        
+        # 会计特有功能：导出
+        if st.session_state.user_role == "finance":
+            csv = df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button("📥 导出财务月报 (CSV)", data=csv, file_name="昊天庙明细.csv", mime="text/csv")
+
+    # 负责人特有功能：图表分析
+    if st.session_state.user_role == "temple_head" and not df.empty:
+        st.markdown("---")
+        st.markdown("### 📊 财务结构分析")
+        chart_data = df.groupby('科目分类')['金额'].sum().reset_index()
+        st.bar_chart(data=chart_data, x='科目分类', y='金额')
