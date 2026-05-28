@@ -10,7 +10,7 @@ st.set_page_config(page_title="昊天观财务管理系统", layout="wide", page
 st.markdown("""
     <style>
 .stApp {
-    background-image: url("https://raw.githubusercontent.com/Min8756/ai-support-to-built-financial-system-of-HaoTian-Temple/main/Gemini_Generated_Image_1923du1923du1923.png");
+    background-image: url("https://raw.githubusercontent.com/Min8756/ai-support-to-built-financial-system-of-HaoTian-Temple/main/Gemini_Generated_Image_iaz9q7iaz9q7iaz9.png");
     background-position: center;
     background-attachment: fixed;
     color: #2F2F2F;
