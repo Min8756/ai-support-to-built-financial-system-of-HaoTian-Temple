@@ -10,7 +10,7 @@ st.set_page_config(page_title="昊天观财务管理系统", layout="wide", page
 st.markdown("""
     <style>
 .stApp {
-    background-image: url("https://image.pollinations.ai/prompt/A%20sublime%20and%20symmetric%20Taoist%20mural%20art%20style%20web%20login%20background%20image%20for%20a%20temple%20financial%20system.%20The%20composition%20is%20divided%20into%20three%20sacred%20vertical%20layers.%20%5BTop%20Layer%5D%20The%20Three%20Pure%20Ones%20(Sanqing)%20appear%20majestically%20in%20the%20clouds%20with%20divine%20golden%20haloes.%20%5BMiddle%20Layer%5D%20The%20venerable%20Jade%20Emperor%20sitting%20on%20his%20celestial%20throne,%20accompanied%20by%20the%20immortal%20L%C3%BC%20Dongbin%20holding%20a%20magic%20sword,%20symbolizing%20heavenly%20management%20and%20spiritual%20destiny.%20%5BBottom%20Layer%5D%20The%20grand%20and%20realistic%20traditional%20Chinese%20architecture%20of%20Haotian%20Temple,%20showing%20a%20stone-paved%20courtyard%20with%20a%20large%20black%20iron%20incense%20burner,%20with%20a%20completely%20empty%20unobstructed%20space%20on%20the%20right%20side%20for%20placing%20a%20login%20box.%20Rich%20colors%20of%20cinnabar%20red,%20royal%20gold,%20and%20deep%20navy%20blue,%208k,%20cinematic%20lighting?width=1280&height=720&nologo=true");
+    background-image: url("https://github.com/Min8756/ai-support-to-built-financial-system-of-HaoTian-Temple/blob/main/Gemini_Generated_Image_1923du1923du1923.png");
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
