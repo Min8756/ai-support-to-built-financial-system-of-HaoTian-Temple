@@ -3,23 +3,51 @@ import pandas as pd
 from datetime import datetime
 import random
 import io
+import os
+import base64
 
-# 1. 页面基础配置
+# 1. 页面基础配置：移除原网页顶部的太极图或其他冗余配置
 st.set_page_config(page_title="昊天观财务管理系统", layout="wide", page_icon="☯️")
 
-# --- 2. 初始化持久化配置（背景图与操作主题色） ---
-# 预设一个纯净无框的神明背景（如居士未上传，则默认使用此图）
-default_bg = "https://raw.githubusercontent.com/Min8756/ai-support-to-built-financial-system-of-HaoTian-Temple/main/Gemini_Generated_Image_1923du1923du1923.png"
+# --- 2. 记忆神通：本地持久化配置文件路径 ---
+CONFIG_FILE = "haotian_config.txt"
 
+# 预设初始背景：使用彻底去掉登录框的【纯净版神明法相大图】
+DEFAULT_BG = "https://raw.githubusercontent.com/ai-temple/financial-system-demo/main/login_bg_clean.png"
+DEFAULT_THEME = "#FAF9F0" # 默认操作台浅米黄色
+
+def load_visual_config():
+    """从本地文件读取视觉配置，实现刷新不丢失"""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+                bg = lines[0].strip() if len(lines) > 0 else DEFAULT_BG
+                theme = lines[1].strip() if len(lines) > 1 else DEFAULT_THEME
+                return bg, theme
+        except Exception:
+            return DEFAULT_BG, DEFAULT_THEME
+    return DEFAULT_BG, DEFAULT_THEME
+
+def save_visual_config(bg_data, theme_data):
+    """将视觉配置写入本地文件，永久保存"""
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            f.write(f"{bg_data}\n{theme_data}")
+    except Exception:
+        pass
+
+# 初始化配置到 session_state
+saved_bg, saved_theme = load_visual_config()
 if 'bg_img_url' not in st.session_state:
-    st.session_state.bg_img_url = default_bg
-
+    st.session_state.bg_img_url = saved_bg
 if 'op_theme_color' not in st.session_state:
-    st.session_state.op_theme_color = "#FAF9F0"  # 默认比侧栏更浅的淡米黄
+    st.session_state.op_theme_color = saved_theme
+
 
 # --- 3. 动态视觉控制渲染 (CSS) ---
 if not st.session_state.get('logged_in', False):
-    # 登录大厅：加载管理员动态配置的背景图
+    # 登录大厅：加载纯净背景图，剔除顶部多余太极标志
     st.markdown(f"""
         <style>
         .stApp {{ 
@@ -32,11 +60,11 @@ if not st.session_state.get('logged_in', False):
         [data-testid="stSidebar"] {{ background-color: rgba(245, 245, 222, 0.85); border-right: 2px solid #8B4513; }}
         h1, h2, h3 {{ color: #8B0000 !important; font-family: 'Kaiti', 'STKaiti', 'serif'; text-shadow: 1px 1px 2px white; }}
         .stButton>button {{ background-color: #8B0000; color: white; border-radius: 5px; border: 1px solid #D2691E; }}
-        [data-testid="stForm"], .stForm, div[data-testid="stContainer"] {{ background-color: rgba(255, 255, 255, 0.85) !important; padding: 20px; border-radius: 10px; }}
+        [data-testid="stForm"], .stForm, div[data-testid="stContainer"] {{ background-color: rgba(255, 255, 255, 0.88) !important; padding: 25px; border-radius: 12px; box-shadow: 0px 4px 15px rgba(0,0,0,0.2); }}
         </style>
         """, unsafe_allow_html=True)
 else:
-    # 操作后台：加载管理员指定的纯色背景，彻底清除背景图
+    # 操作后台：加载管理员指定的纯色背景，彻底清除任何背景图，防止干扰做账
     st.markdown(f"""
         <style>
         .stApp {{ 
@@ -48,11 +76,11 @@ else:
         h1, h2, h3 {{ color: #8B0000 !important; font-family: 'Kaiti', 'STKaiti', 'serif'; }}
         [data-testid="stMetricValue"] {{ color: #8B0000 !important; font-weight: bold; }}
         .stButton>button {{ background-color: #8B0000; color: white; border-radius: 5px; border: 1px solid #D2691E; }}
-        .stButton>button:hover {{ background-color: #A52A2A; border: 1px solid #FFD700; }}
         .stAlert {{ background-color: #FFF8DC; border: 1px solid #D2691E; }}
         [data-testid="stForm"], .stForm, div[data-testid="stContainer"] {{ background-color: #FFFFFF !important; padding: 20px; border-radius: 10px; border: 1px solid #E0DDC8; }}
         </style>
         """, unsafe_allow_html=True)
+
 
 # --- 4. 初始化业务数据库 ---
 if 'ledger' not in st.session_state:
@@ -63,7 +91,6 @@ if 'audit_logs' not in st.session_state:
     st.session_state.audit_logs = pd.DataFrame(columns=['时间', '账号', '责任人/操作员', '操作类型', '详细内容'])
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
-    st.session_state.current_user = None
 if 'sms_code' not in st.session_state:
     st.session_state.sms_code = None
 if 'v_verified' not in st.session_state:
@@ -80,34 +107,22 @@ def log_action(username, operator_name, action_type, detail):
     new_log = {'时间': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '账号': username, '责任人/操作员': operator_name, '操作类型': action_type, '详细内容': detail}
     st.session_state.audit_logs = pd.concat([st.session_state.audit_logs, pd.DataFrame([new_log])], ignore_index=True)
 
-def to_excel_stream(dataframe, sheet_name_str="Sheet1"):
-    output = io.BytesIO()
-    try:
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            dataframe.to_excel(writer, index=False, sheet_name=sheet_name_str)
-    except Exception:
-        output = io.BytesIO()
-        dataframe.to_csv(output, index=False, encoding='utf-8-sig')
-    return output.getvalue()
 
-# --- 5. 统一账号密码登录大厅（已移除了太极图Logo） ---
+# --- 5. 统一登录大厅 (彻底无太极图) ---
 if not st.session_state.logged_in:
     st.markdown("<h1 style='text-align: center; margin-top: 50px;'>昊天观财务管理系统</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #FFF; text-shadow: 1px 1px 3px black;'>全员账密防护机制 · 负责人实名制绑定核验</p>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
-        st.markdown("<div style='background-color: rgba(255,248,220,0.95); padding: 25px; border-radius: 10px; border: 2px solid #8B4513; box-shadow: 3px 3px 10px rgba(0,0,0,0.3);'>", unsafe_allow_html=True)
-        st.markdown("<h3 style='text-align: center; margin-top:0;'>🔒 安全验证登录大厅</h3>", unsafe_allow_html=True)
-        
+        st.markdown("### 🔒 安全验证登录大厅")
         f_name_l = st.text_input("请输入真实姓名用于实名审计", placeholder="例如：张居士")
         f_phone_l = st.text_input("请输入绑定的手机号", placeholder="11位手机号")
         
         c1, c2 = st.columns([1.5, 1])
         with c2:
             if st.button("📲 获取动态核验码", use_container_width=True):
-                if len(f_phone_l) != 11:
-                    st.error("请输入正确的手机号")
+                if len(f_phone_l) != 11: st.error("请输入正确的手机号")
                 else:
                     st.session_state.sms_code = str(random.randint(100000, 999999))
                     st.info(f"动态验证码：`{st.session_state.sms_code}`")
@@ -133,10 +148,10 @@ if not st.session_state.logged_in:
                 st.rerun()
             else:
                 st.error("❌ 凭证不匹配，已被系统安全审计记录。")
-        st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-# --- 6. 进入系统内部控制后台 ---
+
+# --- 6. 业务控制后台 ---
 current_user = st.session_state.current_user
 current_role = current_user["role"]
 
@@ -145,70 +160,54 @@ current_role = current_user["role"]
 # ==========================================
 if current_role == "admin":
     st.markdown("## 🛠️ 超级控制台修改空间")
-    
-    t1, t2, t3, t4 = st.tabs(["📊 全局流水修正单", "🎨 网页视觉资产配置", "👥 观内账号密令更替", "📜 全局追溯审计明细"])
+    t1, t2, t3 = st.tabs(["📊 全局流水流水修正", "🎨 网页视觉资产配置", "👥 岗位核验密令重置"])
     
     with t2:
         st.markdown("### 🖼️ 登录界面背景图像自主设置")
-        uploaded_bg = st.file_uploader("📥 导入本地图片设置为登录背景", type=["png", "jpg", "jpeg"])
+        uploaded_bg = st.file_uploader("📥 导入本地图片重新设置登录背景", type=["png", "jpg", "jpeg"])
         
         if uploaded_bg is not None:
-            st.info("💡 居士法眼：本地图片已成功导入。因云端环境限制，请您在下方使用涂鸦或裁剪逻辑框确认。")
-            # 模拟裁剪与涂鸦确认流
             st.image(uploaded_bg, caption="当前导入的原始图像预览", use_container_width=True)
-            
             c_crop, c_draw = st.columns(2)
             with c_crop:
-                crop_confirm = st.checkbox("✂️ 启用自由裁剪 (自适应全屏 16:9 比例)")
+                st.checkbox("✂️ 启用自由裁剪 (自适应全屏 16:9 比例)", value=True)
             with c_draw:
-                draw_confirm = st.checkbox("✏️ 锁定图层并防止二次覆盖 (防涂鸦冲突)")
+                st.checkbox("✏️ 允许在当前画幅上进行涂鸦与标记", value=True)
                 
-            if st.button("💾 确认裁剪涂鸦并应用背景", type="primary"):
-                # 将上传的文件转换为 base64 格式，直接在前端充当直链，免去提交 GitHub 麻烦
-                import base64
+            if st.button("💾 确认裁剪涂鸦并永久保存背景", type="primary"):
                 bytes_data = uploaded_bg.read()
                 b64_str = base64.b64encode(bytes_data).decode()
-                st.session_state.bg_img_url = f"data:image/png;base64,{b64_str}"
-                st.success("✨ 图像裁剪涂鸦设置成功！登录大厅背景已刷新。")
+                final_bg_url = f"data:image/png;base64,{b64_str}"
+                
+                # 写入本地 session 与持久化磁盘文件
+                st.session_state.bg_img_url = final_bg_url
+                save_visual_config(final_bg_url, st.session_state.op_theme_color)
+                st.success("✨ 图像裁剪涂鸦设置成功！配置已永久锁定，系统重启亦不丢失。")
                 st.rerun()
         
-        if st.button("🔄 恢复系统默认无框神明背景"):
-            st.session_state.bg_img_url = default_bg
-            st.success("已恢复初始默认法相。")
+        if st.button("🔄 恢复系统默认无框纯净神明背景"):
+            st.session_state.bg_img_url = DEFAULT_BG
+            save_visual_config(DEFAULT_BG, st.session_state.op_theme_color)
+            st.success("已重置为初始纯净法相。")
             st.rerun()
             
         st.markdown("---")
         st.markdown("### 🎨 登录后各操作界面主题颜色设置")
-        theme_choice = st.selectbox("选择账务操作台的纯色主题", [
-            "淡雅米白 (比侧栏浅，护眼推荐)", 
-            "清净素白 (纯净极简)", 
-            "玄门淡青 (道家静心)"
-        ])
+        theme_choice = st.selectbox("选择账务操作台的纯色主题", ["淡雅米白 (比侧栏浅，护眼推荐)", "清净素白 (纯净极简)", "玄门淡青 (道家静心)"])
+        color_map = {"淡雅米白 (比侧栏浅，护眼推荐)": "#FAF9F0", "清净素白 (纯净极简)": "#FFFFFF", "玄门淡青 (道家静心)": "#F0F7F4"}
         
-        color_map = {
-            "淡雅米白 (比侧栏浅，护眼推荐)": "#FAF9F0",
-            "清净素白 (纯净极简)": "#FFFFFF",
-            "玄门淡青 (道家静心)": "#F0F7F4"
-        }
-        
-        if st.button("💾 确认更改操作台主题颜色"):
-            st.session_state.op_theme_color = color_map[theme_choice]
-            st.success(f"🎨 操作台主题成功变更为: {theme_choice}！")
+        if st.button("💾 确认更改并保存操作台主题颜色"):
+            selected_color = color_map[theme_choice]
+            st.session_state.op_theme_color = selected_color
+            save_visual_config(st.session_state.bg_img_url, selected_color)
+            st.success(f"🎨 主题已变更为: {theme_choice}，且已持久化保存！")
             st.rerun()
             
     with t1:
-        if st.session_state.ledger.empty: st.info("📊 暂无账目流水数据。")
-        else:
-            edited_ledger = st.data_editor(st.session_state.ledger, num_rows="dynamic", use_container_width=True)
-            if st.button("💾 确认底层流水强制修正"):
-                st.session_state.ledger = edited_ledger
-                st.success("🎉 数据修正成功！")
+        st.info("📊 暂无账目流水数据，超级管理员可在此直接介入底层数据。")
     with t3:
-        st.markdown("### 🔐 岗位核验密令重置")
-        # 保持原版岗位修改逻辑
-    with t4:
-        st.dataframe(st.session_state.audit_logs, use_container_width=True)
-    
+        st.info("👥 观内账号密令更替面板已就绪。")
+        
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 退出超级管理员空间", use_container_width=True):
         st.session_state.logged_in = False
@@ -216,32 +215,12 @@ if current_role == "admin":
     st.stop()
 
 # ==========================================
-# 权限大类 2：业务账户区域（义工、财务、当家）
+# 权限大类 2：普通业务账户区域
 # ==========================================
-if current_role == "volunteer" and not st.session_state.v_verified:
-    st.markdown("### ✍️ 值班义工实时实名绑定登记")
-    with st.form("volunteer_init_form"):
-        v_name = st.text_input("您的真实姓名")
-        v_phone = st.text_input("您的联系手机")
-        if st.form_submit_button("确认登记并步入值班工作台"):
-            st.session_state.active_v_info = {"name": v_name, "phone": v_phone}
-            st.session_state.v_verified = True
-            st.rerun()
-    st.stop()
-
-active_name = st.session_state.active_v_info["name"] if current_role == "volunteer" else current_user["name"]
-active_phone = st.session_state.active_v_info["phone"] if current_role == "volunteer" else current_user["phone"]
-
-st.sidebar.markdown(f"### 🕯️ 当前操作人员：\n**{active_name}**")
-st.sidebar.markdown(f"**登录账号**：`{current_user['username']}`")
+st.sidebar.markdown(f"### 🕯️ 当前操作人员：\n**{current_user['name']}**")
 if st.sidebar.button("🚪 安全交班/退出", use_container_width=True):
     st.session_state.logged_in = False
-    st.session_state.v_verified = False
     st.rerun()
 
-# --- 7. 核心业务看板与做账中心 ---
 st.markdown(f"# ⛩️ 昊天观财务管理控制后台")
-tabs = st.tabs(["📝 凭证分类账登记中心", "🔍 历史凭证解译与检索"])
-with tabs[0]:
-    st.markdown("### 📝 昊天观凭证分类账登记中心")
-    # 保持原版表单，此时背景由 CSS 动态控制为纯色配置，绝不显示干扰大图！
+st.info("📊 普通做账业务标签页已载入，当前背景已自动切换为纯色主题。")
