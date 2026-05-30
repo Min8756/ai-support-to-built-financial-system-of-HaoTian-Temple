@@ -11,7 +11,6 @@ st.set_page_config(page_title="昊天观财务管理系统", layout="wide", page
 
 # --- 2. 数据库与持久化基础配置 ---
 CONFIG_FILE = "haotian_config.txt"
-# 依据技术与视觉约束，将固定背景图写入默认配置
 DEFAULT_BG = "https://raw.githubusercontent.com/Min8756/ai-support-to-built-financial-system-of-HaoTian-Temple/main/Gemini_Generated_Image_iaz9q7iaz9q7iaz9.png"
 DEFAULT_THEME = "#FAF9F0"
 
@@ -39,7 +38,7 @@ if 'logged_in' not in st.session_state:
 if 'current_user' not in st.session_state:
     st.session_state.current_user = None
 
-# 核心用户凭证名册（支持管理员后台一键拉黑/重置）
+# 核心用户凭证名册
 if 'user_registry' not in st.session_state:
     st.session_state.user_registry = {
         "volunteer": [
@@ -64,9 +63,7 @@ def append_audit_log(username, name, action):
     new_log = {"操作时间": now_str, "操作账号": username, "操作人姓名": name, "操作内容": action}
     st.session_state.audit_logs = pd.concat([st.session_state.audit_logs, pd.DataFrame([new_log])], ignore_index=True)
 
-# ==========================================
-# 🛠️ 严格依据《会计体系.docx》构建的联动字典体系
-# ==========================================
+# 会计体系架构字典
 ACCOUNTING_STRUCTURE = {
     "资产类": {
         "1001 库存现金": ["庙内功功德箱每日清点前临时周转现金", "日常零星开支"],
@@ -101,7 +98,6 @@ ACCOUNTING_STRUCTURE = {
     }
 }
 
-# 核心总账明细数据库初始化（加入审批流关键状态字段）
 if 'ledger' not in st.session_state:
     test_data = [
         {
@@ -117,7 +113,6 @@ if 'ledger' not in st.session_state:
     ]
     st.session_state.ledger = pd.DataFrame(test_data)
 
-# 借贷管理清册（需住持联动审批）
 if 'borrow_db' not in st.session_state:
     st.session_state.borrow_db = pd.DataFrame([
         {
@@ -127,7 +122,6 @@ if 'borrow_db' not in st.session_state:
         }
     ])
 
-# 数字化档案凭证保险库
 if 'file_vault' not in st.session_state:
     st.session_state.file_vault = {
         '收据_2026053001.jpg': b"IMAGE_BINARY_DATA_STREAM",
@@ -230,10 +224,10 @@ if not st.session_state.logged_in:
                             st.rerun()
                     else:
                         st.error("❌ 密码配钥失败或该账号未注册。")
-            st.stop()
+            st.stop() # <-- 核心熔断守卫：未登录时绝对不向下执行任何代码
 
-# ======================== 🛡️ 核心报错修复点 🛡========================
-# 安全规范获取用户信息：对当前用户字典加上严格的“非空校验熔断”，避免产生属性抓取报错。
+# ======================== 🛡️ 终极安全隔离修复区 🛡========================
+# 只有确认登录（logged_in == True）之后，才允许解析身份字典，完美避开并发刷新期的空指针错误
 current_user = st.session_state.current_user if st.session_state.current_user is not None else {}
 current_role = current_user.get("role", "volunteer")
 # ====================================================================
@@ -268,7 +262,6 @@ if current_role == "admin":
             with st.form("adm_modify_form"):
                 ed_date = st.text_input("账目日期", str(row_data['日期']))
                 
-                # 🛠️ 管理员特权修缮联动逻辑：精准过滤，彻底杜绝资产类误显示
                 ed_el = st.selectbox("会计要素大类", list(ACCOUNTING_STRUCTURE.keys()), index=list(ACCOUNTING_STRUCTURE.keys()).index(row_data['会计要素']) if row_data['会计要素'] in ACCOUNTING_STRUCTURE else 0, key=f"adm_el_{selected_idx}")
                 
                 adm_c1_opts = list(ACCOUNTING_STRUCTURE[ed_el].keys())
@@ -380,10 +373,9 @@ elif current_role == "volunteer":
             v_date = st.date_input("1. 发生日期", date.today())
             v_nature = st.radio("2. 确定资财收支属性", ["信众随喜捐赠类收入", "观内场所日常维护/小额办公支出"], horizontal=True)
             
-            # 🛠️ 义工账台严格联动：根据收支大类自动锁死父要素，不给资产类科目越界的机会
             if "收入" in v_nature:
                 el_auto = "收入类"
-                c1_auto = "4001 功德捐赠收入——非限定性"
+                c1_auto = "4001 功功德捐赠收入——非限定性"
             else:
                 el_auto = "支出类"
                 c1_auto = "5201 管理费用"
@@ -480,7 +472,6 @@ else:
         with st.form("manual_bookkeeping_form"):
             f_date = st.date_input("记账日期", date.today())
             
-            # 联动设计：要素 -> 一级 -> 二级
             f_el = st.selectbox("1. 选择会计大类要素", list(ACCOUNTING_STRUCTURE.keys()), key="pro_el")
             
             c1_opts = list(ACCOUNTING_STRUCTURE[f_el].keys())
@@ -562,9 +553,8 @@ else:
         st.markdown("### 📜 规范化财务报表大盘（按非营利组织制度定义）")
         rep_period = st.selectbox("请选择要生成的会计报表周期阶段", ["2026年05月度中盘报表", "2026年第二季度周期报表", "2026年年度决算预估总表"])
         
-        # 实时归集重组动态平衡表数据
         df_l = st.session_state.ledger[st.session_state.ledger['审批状态'].isin(["无需审批", "住持已批准"])]
-        sum_asset = df_l[df_l['会计要素'] == '资产类']['金额'].sum() + 500000.0 # 叠加初始底气资本
+        sum_asset = df_l[df_l['会计要素'] == '资产类']['金额'].sum() + 500000.0
         sum_liab = df_l[df_l['会计要素'] == '负债类']['金额'].sum() + st.session_state.borrow_db['本金金额'].sum()
         sum_rev = df_l[df_l['会计要素'] == '收入类']['金额'].sum()
         sum_exp = df_l[df_l['会计要素'] == '支出类']['金额'].sum()
@@ -582,7 +572,6 @@ else:
         })
         st.table(df_report_view)
         
-        # 导出 Excel 形式的基础功能组件
         excel_rep = io.BytesIO()
         with pd.ExcelWriter(excel_rep, engine='openpyxl') as wr:
             df_report_view.to_excel(wr, index=False, sheet_name="核心业务收支表")
@@ -609,7 +598,7 @@ else:
             b_dir = st.selectbox("资财头寸借贷方向", ["借入(负债/欠别人)", "借出(债权/别人欠观内)"])
             b_person = st.text_input("债权/债务往来单位全称 (如: XX商业银行 / XX居士)")
             b_amt = st.number_input("融资本金数额 (元)", min_value=0.0, step=10000.0)
-            b_rate = st.number_value = st.number_input("契约年化利率 (%)", min_value=0.0, max_value=24.0, value=3.85)
+            b_rate = st.number_input("契约年化利率 (%)", min_value=0.0, max_value=24.0, value=3.85)
             b_limit = st.date_input("契约承诺法定期限到期还款日", date.today())
             b_memo = st.text_area("长周期利息结算或资金用途备注")
             b_file = st.file_uploader("上传已签署盖章的借贷原始合同扫描件", type=["pdf", "jpg", "png"])
