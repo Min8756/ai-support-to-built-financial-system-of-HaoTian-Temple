@@ -38,7 +38,7 @@ if 'logged_in' not in st.session_state:
 if 'current_user' not in st.session_state:
     st.session_state.current_user = None
 
-# 核心用户凭证名册 (新增 is_blocked 字段以支持拉黑状态控制)
+# 核心用户凭证名册
 if 'user_registry' not in st.session_state:
     st.session_state.user_registry = {
         "volunteer": [
@@ -55,7 +55,7 @@ if 'user_registry' not in st.session_state:
 # 审计日志引擎
 if 'audit_logs' not in st.session_state:
     st.session_state.audit_logs = pd.DataFrame([
-        {"操作时间": "2026-05-30 09:15:22", "操作账号": "finance", "操作人姓名": "张会计", "操作内容": "系统初始化开盘，导入符合《民间非营利组织会计制度》的期初数据。"}
+        {"操作时间": "2026-05-30 09:15:22", "操作账号": "system", "操作人姓名": "系统核心", "操作内容": "系统完成空白初始化，符合《民间非营利组织会计制度》标准。"}
     ])
 
 def append_audit_log(username, name, action):
@@ -99,36 +99,25 @@ ACCOUNTING_STRUCTURE = {
     }
 }
 
+# 1. 【精准清空】收支账本 DataFrame 初始化为空白框架
 if 'ledger' not in st.session_state:
-    test_data = [
-        {
-            '流水号': 'HT-202605-001', '日期': '2026-05-30', '会计要素': '收入类', '一级科目': '4001 功德捐赠收入——非限定性', '二级科目': '日常投入功德箱',
-            '金额': 5000.0, '经手人': '妙音居士', '凭证附件': '收据2026053001.jpg', '操作员': '张会计', '操作员电话': '13800001111',
-            '备注': '香客自愿投递功德箱结余', '审批状态': '无需审批', '接待对象': '无', '接待事由': '无'
-        },
-        {
-            '流水号': 'HT-202605-002', '日期': '2026-05-30', '会计要素': '支出类', '一级科目': '5201 管理费用', '二级科目': '水电燃气费',
-            '金额': 1200.0, '经手人': '自来水公司', '凭证附件': '发票2026053001.pdf', '操作员': '张会计', '操作员电话': '13800001111',
-            '备注': '解缴第二季度观内日常水费', '审批状态': '无需审批', '接待对象': '无', '接待事由': '无'
-        }
-    ]
-    st.session_state.ledger = pd.DataFrame(test_data)
-
-if 'borrow_db' not in st.session_state:
-    st.session_state.borrow_db = pd.DataFrame([
-        {
-            '合同单号': 'HT-LOAN-2026-001', '借贷方向': '借入(负债)', '债权/债务人': '城固商业银行', '本金金额': 500000.0,
-            '年化利率(%)': 4.15, '签署日期': '2026-02-15', '到期时限': '2026-12-31', '经办人': '张会计',
-            '凭证附件': '借款合同_2026021501.pdf', '审批状态': '住持已批准', '备注': '筹措斋堂扩建工程款'
-        }
+    st.session_state.ledger = pd.DataFrame(columns=[
+        '流水号', '日期', '会计要素', '一级科目', '二级科目', 
+        '金额', '经手人', '凭证附件', '操作员', '操作员电话', 
+        '备注', '审批状态', '接待对象', '接待事由'
     ])
 
+# 1. 【精准清空】长期借贷合同库 DataFrame 初始化为空白框架
+if 'borrow_db' not in st.session_state:
+    st.session_state.borrow_db = pd.DataFrame(columns=[
+        '合同单号', '借贷方向', '债权/债务人', '本金金额', 
+        '年化利率(%)', '签署日期', '到期时限', '经办人', 
+        '凭证附件', '审批状态', '备注'
+    ])
+
+# 1. 【精准清空】原始凭证档案库
 if 'file_vault' not in st.session_state:
-    st.session_state.file_vault = {
-        '收据2026053001.jpg': b"IMAGE_BINARY_DATA_STREAM",
-        '发票2026053001.pdf': b"PDF_BINARY_DATA_STREAM",
-        '借款合同_2026021501.pdf': b"CONTRACT_BINARY_DATA_STREAM"
-    }
+    st.session_state.file_vault = {}
 
 if 'vol_active_name' not in st.session_state:
     st.session_state.vol_active_name = ""
@@ -158,7 +147,6 @@ else:
     """, unsafe_allow_html=True)
 
 # --- 4. 核心工具包通用引擎 ---
-# 完美契合最新指定格式升级的凭证归档重命名算法（例如: 发票2025091003, 收据2026041001）
 def smart_rename_by_rules(f_date, f_el, uploaded_file):
     date_str = f_date.strftime('%Y%m%d')
     doc_type = "收据" if f_el in ["收入类", "净资产类"] else "发票"
@@ -169,7 +157,6 @@ def smart_rename_by_rules(f_date, f_el, uploaded_file):
     for name in all_attachments:
         if str(name).startswith(f"{doc_type}{date_str}"):
             try:
-                # 剔除前缀和扩展名提取流水数字
                 core_num = str(name).replace(f"{doc_type}{date_str}", "").split('.')[0]
                 ext_num = int(core_num)
                 if ext_num >= day_count:
@@ -219,7 +206,6 @@ if not st.session_state.logged_in:
                                 matched_user = u
                                 break
                     if matched_user:
-                        # 🛡️ 后台黑名单拉黑熔断拦截机制
                         if matched_user.get("is_blocked", False):
                             st.error("❌ 抱歉，该执事账号当前已被系统拉黑封禁，不可登台！")
                         else:
@@ -229,13 +215,14 @@ if not st.session_state.logged_in:
                             st.rerun()
                     else:
                         st.error("❌ 密码配钥失败或该账号未注册。")
-            st.stop()
+                        st.stop()
 
 current_user = st.session_state.current_user if st.session_state.current_user is not None else {}
 current_role = current_user.get("role", "volunteer")
 
 st.sidebar.markdown(f"### 🕯️ 执事人：{current_user.get('name', '匿名用户')}")
 st.sidebar.markdown(f"当前岗位：`{current_user.get('title', '常驻执事')}`")
+
 if st.sidebar.button("🚪 安全换班交接", use_container_width=True):
     append_audit_log(current_user.get("username", "unknown"), current_user.get("name", "unknown"), "退出登录，交接完毕。")
     st.session_state.logged_in = False
@@ -263,25 +250,21 @@ if current_role == "admin":
         else:
             selected_idx = st.selectbox(
                 "选择需要紧急修正或移除的账目流水号", 
-                st.session_state.ledger.index, 
+                st.session_state.ledger.index,
                 format_func=lambda x: f"{st.session_state.ledger.loc[x, '流水号']} | 金额:{st.session_state.ledger.loc[x, '金额']} | {st.session_state.ledger.loc[x, '备注']}"
             )
             row_data = st.session_state.ledger.loc[selected_idx]
-            
             with st.form("adm_modify_form"):
                 ed_date = st.text_input("账目日期", str(row_data['日期']))
                 elements_list = list(ACCOUNTING_STRUCTURE.keys())
                 el_default_idx = elements_list.index(row_data['会计要素']) if row_data['会计要素'] in elements_list else 0
                 ed_el = st.selectbox("会计要素大类", elements_list, index=el_default_idx)
-                
                 c1_opts = list(ACCOUNTING_STRUCTURE[ed_el].keys())
                 c1_default_idx = c1_opts.index(row_data['一级科目']) if row_data['一级科目'] in c1_opts else 0
                 ed_c1 = st.selectbox("一级科目", c1_opts, index=c1_default_idx)
-                
                 c2_opts = ACCOUNTING_STRUCTURE[ed_el][ed_c1]
                 c2_default_idx = c2_opts.index(row_data['二级科目']) if row_data['二级科目'] in c2_opts else 0
                 ed_c2 = st.selectbox("二级科目", c2_opts, index=c2_default_idx)
-                
                 ed_amount = st.number_input("金额 (元)", value=float(row_data['金额']))
                 ed_person = st.text_input("经手报销人", str(row_data['经手人']))
                 ed_file = st.text_input("挂载凭证文件名", str(row_data['凭证附件']))
@@ -290,8 +273,8 @@ if current_role == "admin":
                 col_btn1, col_btn2 = st.columns(2)
                 if col_btn1.form_submit_button("💾 确认保存修改并覆盖发布"):
                     st.session_state.ledger.loc[selected_idx] = [
-                        row_data['流水号'], ed_date, ed_el, ed_c1, ed_c2, float(ed_amount), ed_person, ed_file,
-                        "超级管理员", "N/A", ed_memo, row_data.get('审批状态', '无需审批'), row_data.get('接待对象', '无'), row_data.get('接待事由', '无')
+                        row_data['流水号'], ed_date, ed_el, ed_c1, ed_c2, float(ed_amount), ed_person,
+                        ed_file, "超级管理员", "N/A", ed_memo, row_data.get('审批状态', '无需审批'), row_data.get('接待对象', '无'), row_data.get('接待事由', '无')
                     ]
                     append_audit_log("admin", "超级总管", f"强制审计修改流水账目: {row_data['流水号']}")
                     st.success("🎉 修改大盘发布成功！")
@@ -311,332 +294,316 @@ if current_role == "admin":
             for fname in filtered_keys:
                 c_f1, c_f2 = st.columns([4, 1])
                 c_f1.markdown(f"📁 归档会计凭证：`{fname}`")
-                c_f2.download_button("📥 调阅提取", st.session_state.file_vault[fname], file_name=fname, key=f"v_dl_{fname}")
+                c_f2.download_button("📥 导出提取", data=st.session_state.file_vault[fname], file_name=fname, key=f"dl_vault_{fname}")
         else:
-            st.info("凭证档案馆空虚。")
+            st.info("📂 档案馆当前无对应存盘记录。")
             
     with adm_tabs[3]:
-        # ==================== 🛠️ 满足图片二需求的管理员账户管理控制台 ====================
-        st.markdown("#### 👥 账户生命周期管理与全角色权限控制台")
-        
-        # 建立全局扁平化账户名册列表，方便查询、编辑、修改与拉黑
-        flat_users = []
-        for r_key, u_list in st.session_state.user_registry.items():
-            for index_in_role, u_item in enumerate(u_list):
-                flat_users.append({
-                    "show_name": f"[{u_item['title']}] {u_item['name']} (@{u_item['username']})",
-                    "role_key": r_key,
-                    "index": index_in_role,
-                    "data": u_item
-                })
-        
-        edit_mode = st.radio("选择账户操作模式", ["➕ 录入全新职能账户", "🛠️ 编辑/删除/拉黑现有账户"], horizontal=True)
-        
-        if edit_mode == "➕ 录入全新职能账户":
-            with st.form("new_user_form"):
-                new_u = st.text_input("新账号登录名")
-                new_p = st.text_input("初始安全密码")
-                new_n = st.text_input("法名/真实姓名")
-                new_ph = st.text_input("绑定联络电话")
-                new_r = st.selectbox("分配系统岗位入口角色", ["volunteer", "finance", "temple_head"])
-                if st.form_submit_button("➕ 登记并开放系统权限"):
-                    if not new_u or not new_p:
-                        st.error("❌ 登录名和密码不能为空")
-                    else:
-                        title_map = {"volunteer": "值班义工", "finance": "财务总账", "temple_head": "当家住持"}
-                        st.session_state.user_registry[new_r].append({
-                            "username": new_u, "password": new_p, "name": new_n, "phone": new_ph, "role": new_r, "title": title_map[new_r], "is_blocked": False
-                        })
-                        append_audit_log("admin", "超级管理员", f"录入新账号: {new_u}")
-                        st.success("🎉 新执事信息成功录入大盘！")
+        st.markdown("#### 👥 统筹账户名单与后台状态干预")
+        for r_name, u_list in st.session_state.user_registry.items():
+            st.markdown(f"**岗位归属：{r_name.upper()}**")
+            for u in u_list:
+                uc1, uc2, uc3 = st.columns([3, 2, 1])
+                uc1.write(f"🏷️ 账号名: `{u['username']}` | 实名指派: **{u['name']}** | 联络方式: {u['phone']}")
+                is_b = u.get("is_blocked", False)
+                uc2.write(f"当前状态：{'🚨 已全面拉黑拦截' if is_b else '🟢 正常履行公职'}")
+                if is_b:
+                    if uc3.button("🔓 宽赦解封", key=f"unblk_{u['username']}"):
+                        u["is_blocked"] = False
+                        append_audit_log("admin", "超级总管", f"解除对账户 {u['username']} 的拉黑惩戒。")
                         st.rerun()
-        else:
-            if not flat_users:
-                st.info("当前系统名册内暂无常规可管理账户。")
-            else:
-                selected_user_meta = st.selectbox("选择要进行信息编辑或状态变更的已有账户", flat_users, format_func=lambda x: x["show_name"])
-                u_data = selected_user_meta["data"]
-                r_key = selected_user_meta["role_key"]
-                r_idx = selected_user_meta["index"]
-                
-                st.markdown("##### ⚙️ 账户运营属性调整维保")
-                with st.form("edit_user_form"):
-                    up_n = st.text_input("法名/真实姓名", value=u_data.get("name", ""))
-                    up_ph = st.text_input("绑定联络电话", value=u_data.get("phone", ""))
-                    up_p = st.text_input("重置安全登录密码", value=u_data.get("password", ""))
-                    up_r = st.selectbox("重定向系统岗位入口角色", ["volunteer", "finance", "temple_head"], index=["volunteer", "finance", "temple_head"].index(r_key))
-                    
-                    # 正常登录状态与拉黑封禁开关控制
-                    current_block_status = u_data.get("is_blocked", False)
-                    block_select = st.selectbox("当前操作人权限状态控制", ["🟢 正常运营 (授信登录及操作)", "🔴 已拉黑该操作人 (即刻熔断封禁)"], index=1 if current_block_status else 0)
-                    up_blocked = True if "已拉黑" in block_select else False
-                    
-                    c_btn1, c_btn2 = st.columns(2)
-                    if c_btn1.form_submit_button("💾 保存并更新账户安全数据"):
-                        title_map = {"volunteer": "值班义工", "finance": "财务总账", "temple_head": "当家住持"}
-                        # 先从老角色阵列中抽离
-                        st.session_state.user_registry[r_key].pop(r_idx)
-                        # 注入新属性并塞入目标角色阵列
-                        updated_node = {
-                            "username": u_data["username"], "password": up_p, "name": up_n, "phone": up_ph,
-                            "role": up_r, "title": title_map[up_r], "is_blocked": up_blocked
-                        }
-                        st.session_state.user_registry[up_r].append(updated_node)
-                        append_audit_log("admin", "超级管理员", f"编辑并修改了账户 [{u_data['username']}] 的安全属性与状态")
-                        st.success("🎉 执事安全账照数据成功回填更新！")
-                        st.rerun()
-                        
-                    if c_btn2.form_submit_button("❌ 销毁此账户凭证 (不可逆危险)"):
-                        st.session_state.user_registry[r_key].pop(r_idx)
-                        append_audit_log("admin", "超级管理员", f"彻底粉碎注销了账户: {u_data['username']}")
-                        st.warning("💥 该常规账户已从系统名册中永久斩断抹除！")
+                else:
+                    if uc3.button("🚨 强制拉黑", key=f"blk_{u['username']}"):
+                        u["is_blocked"] = True
+                        append_audit_log("admin", "超级总管", f"将可疑账户 {u['username']} 强制拉黑拦截。")
                         st.rerun()
 
 # ==============================================================================
-# 🧑‍🌾 权限模块二：VOLUNTEER 值班义工快捷账台 (按图片一核心全面精简升级)
+# 🎮 权限模块二：VOLUNTEER 义工工作台
 # ==============================================================================
 elif current_role == "volunteer":
-    st.markdown("## ⛩ * 昊天观·值班义工快捷账台")
+    st.markdown("## 🪵 昊天观·义工日记账经手录入台")
+    
+    # 义工二次录入校验机制
     if not st.session_state.vol_active_name or not st.session_state.vol_active_phone:
-        st.markdown("#### 🔑 值班义工登台履职前置实名认证")
-        with st.form("vol_lock_gate"):
-            v_name = st.text_input("✍️ 本次值班义工姓名/法名")
-            v_phone = st.text_input("📱 值班人员合法联络手机号")
-            if st.form_submit_button("解锁值班财务工作台", use_container_width=True):
-                if v_name and v_phone:
-                    st.session_state.vol_active_name = v_name
-                    st.session_state.vol_active_phone = v_phone
-                    append_audit_log("volunteer", v_name, f"义工认证登台，手机：{v_phone}")
-                    st.rerun()
+        st.warning("⚠️ 依据《宗教活动场所财务监督管理办法》，上岗做账前须追加登记本日经办义工法号/姓名及联络电话进行核验追溯。")
+        with st.form("vol_re_auth"):
+            v_name = st.text_input("值班义工法号/姓名 (如: 妙音居士)", value=current_user.get("name", ""))
+            v_phone = st.text_input("值班义工联络电话 (11位手机号)")
+            if st.form_submit_button("📝 确认登记绑定并解锁工作台"):
+                if len(v_phone) != 11 or not v_phone.isdigit():
+                    st.error("❌ 电话核验失败，必须输入11位纯数字移动电话！")
+                elif not v_name.strip():
+                    st.error("❌ 实名登记失败，姓名/法号不能为空！")
                 else:
-                    st.error("❌ 请务必填写完整方可开盘！")
+                    st.session_state.vol_active_name = v_name.strip()
+                    st.session_state.vol_active_phone = v_phone.strip()
+                    append_audit_log(current_user["username"], v_name.strip(), f"完成二次身份实名激活绑定，核查手机号: {v_phone}")
+                    st.success("🔓 身份核查配对通过，工作台已全面激活！")
+                    st.rerun()
         st.stop()
         
-    st.markdown(f"**当前值班履职义工：`{st.session_state.vol_active_name}` ({st.session_state.vol_active_phone})**")
-    v_tabs = st.tabs(["📝 快捷凭证流水登记", "🔍 今日日记账速览与导出"])
+    # 2. 【精准修改：二次录入登录成功后的弹窗提醒组件】
+    st.toast("💡 **提示**：请每日义工将本日日记账导出到本地硬盘并保存。", icon="📝")
+    st.info("💡 **工作常驻要求**：请每日义工将本日日记账导出到本地硬盘并保存。")
     
-    with v_tabs[0]:
-        # 🌟 满足需求一：彻底精简无门槛的 4项 表单界面
-        with st.form("vol_simplified_form"):
-            v_date = st.date_input("1. 发生日期", date.today())
-            v_amount = st.number_input("2. 变动金额 (元)", min_value=0.0, step=10.0)
+    # 获取与本日值班义工关联的经账流水明细
+    df_vol = st.session_state.ledger[
+        (st.session_state.ledger['操作员'] == current_user['username']) & 
+        (st.session_state.ledger['经手人'] == st.session_state.vol_active_name)
+    ]
+    
+    vol_w_tabs = st.tabs(["✍️ 随手记手工账本", "📖 本人经手明细"])
+    
+    with vol_w_tabs[0]:
+        with st.form("vol_add_ledger_form"):
+            st.markdown("#### 📝 填报日常随手记账单")
+            f_date = st.date_input("开具/业务发生日期", date.today())
+            f_element = st.selectbox("会计要素分类", list(ACCOUNTING_STRUCTURE.keys()))
             
-            # 您指定的标准长文本提示词辅助注入
-            v_memo = st.text_area(
-                "3. 录入详细说明",
-                placeholder="提示：请按以下格式填写：几年几月几日几时，谁来，进行何种操作，涉及资金数量为多少。以便系统与人工精准识别资金性质及用途。"
-            )
-            v_file = st.file_uploader("4. 上传有关凭证", type=["jpg", "png", "pdf"])
+            c1_options = list(ACCOUNTING_STRUCTURE[f_element].keys())
+            f_c1 = st.selectbox("对应一级会计科目", c1_options)
+            f_c2 = st.selectbox("对应二级明细科目", ACCOUNTING_STRUCTURE[f_element][f_c1])
             
-            if st.form_submit_button("🔥 确认无误·提交流水至系统后台AI智能识别", use_container_width=True):
-                if v_amount <= 0 or not v_memo:
-                    st.error("❌ 变动金额与详细说明为必填项，无法提交归档！")
+            f_amt = st.number_input("发生金额 (元)", min_value=0.01, step=10.0, format="%.2f")
+            f_file = st.file_uploader("上传对应合法原始凭证 (支持 PDF, JPG, PNG 图像档案)", type=["pdf", "jpg", "png"])
+            f_memo = st.text_area("摘要及因缘详情备注说明 (如: 功德箱清点/购买日常照明蜡烛)")
+            
+            st.markdown("---")
+            st.markdown("##### 👥 业务招待透明化专项申报 (若非招待开支请保持默认)")
+            f_rec_obj = st.text_input("外来接待对象/单位名称", value="无")
+            f_rec_reason = st.text_area("外来招待事由及合规说明", value="无")
+            
+            if st.form_submit_button("🪵 提交并呈报入账大盘"):
+                if f_amt <= 0:
+                    st.error("❌ 入账金额必须大于 0 元！")
                 else:
-                    # 🧠 后台智能语义打标签机制 (通过关键词模糊判定)
-                    detected_element = "收入类"
-                    detected_c1 = "4001 功德捐赠收入——非限定性"
-                    detected_c2 = "随喜功德款"
+                    new_id = f"HT-{f_date.strftime('%Y%m')}-{random.randint(100,999)}"
+                    final_file_name = "未传凭证.jpg"
+                    if f_file:
+                        final_file_name = smart_rename_by_rules(f_date, f_element, f_file)
+                        st.session_state.file_vault[final_file_name] = f_file.getvalue()
+                        
+                    is_need_approve = "等待住持审核" if (f_element == "支出类" and f_amt >= 10000.0) else "无需审批"
                     
-                    # 扫描支出高频敏感关键词
-                    expense_keywords = ["支出", "买", "采购", "付", "给", "水", "电", "煤", "燃气", "工资", "报销", "维修", "修缮", "开支", "费用"]
-                    is_expense = any(k in v_memo for k in expense_keywords)
-                    
-                    if is_expense:
-                        detected_element = "支出类"
-                        if "修缮" in v_memo or "建" in v_memo:
-                            detected_c1 = "5301 文物及建筑修缮支出"
-                            detected_c2 = "殿堂翻新"
-                        elif "香" in v_memo or "烛" in v_memo:
-                            detected_c1 = "5101 经营结缘成本"
-                            detected_c2 = "香烛采购进价成本"
-                        else:
-                            detected_c1 = "5201 管理费用"
-                            detected_c2 = "日常维修费" if "维修" in v_memo else "办公用品"
-                    else:
-                        # 细分收入子项
-                        if "点灯" in v_memo or "祈福" in v_memo or "法会" in v_memo:
-                            detected_c1 = "4101 法会服务收入"
-                            detected_c2 = "消灾/祈福/度亡法会收入"
-                        elif "香" in v_memo or "文创" in v_memo:
-                            detected_c1 = "4201 经营结缘收入"
-                            detected_c2 = "香烛售卖流通收入"
-                    
-                    # ⚡ 严格依照您指定的格式重命名并挂载凭证 (例如：收据2026041001, 发票2025091003)
-                    assigned_name = smart_rename_by_rules(v_date, detected_element, v_file)
-                    st.session_state.file_vault[assigned_name] = v_file.getvalue() if v_file else b"NO_DATA"
-                    
-                    f_id = f"HT-VOL-{datetime.now().strftime('%Y%m%d')}-{random.randint(100,999)}"
-                    app_status = "等待住持审批" if (detected_element == "支出类" and float(v_amount) >= 10000.0) else "无需审批"
-                    
-                    # 后台自动配对映射并记入系统大盘总账
                     new_row = {
-                        '流水号': f_id, '日期': v_date.strftime('%Y-%m-%d'), '会计要素': detected_element, '一级科目': detected_c1, '二级科目': detected_c2,
-                        '金额': float(v_amount), '经手人': st.session_state.vol_active_name, '凭证附件': assigned_name,
-                        '操作员': f"义工:{st.session_state.vol_active_name}", '操作员电话': st.session_state.vol_active_phone,
-                        '备注': v_memo, '审批状态': app_status, '接待对象': '无', '接待事由': '无'
+                        '流水号': new_id, '日期': str(f_date), '会计要素': f_element, '一级科目': f_c1, '二级科目': f_c2,
+                        '金额': float(f_amt), '经手人': st.session_state.vol_active_name, '凭证附件': final_file_name,
+                        '操作员': current_user['username'], '操作员电话': st.session_state.vol_active_phone,
+                        '备注': f_memo, '审批状态': is_need_approve, '接待对象': f_rec_obj, '接待事由': f_rec_reason
                     }
+                    
                     st.session_state.ledger = pd.concat([st.session_state.ledger, pd.DataFrame([new_row])], ignore_index=True)
-                    append_audit_log("volunteer", st.session_state.vol_active_name, f"流水账快捷录入(后台AI自动打标分类): {f_id} -> {assigned_name}")
-                    st.success(f"🎉 资财变动数据上传成功！系统已自动智能完成要素识别，并完成凭证规范性编码归档：`{assigned_name}`")
+                    append_audit_log(current_user['username'], st.session_state.vol_active_name, f"录入流转单据: {new_id}, 金额: {f_amt}, 状态: {is_need_approve}")
+                    st.success(f"🎉 成功录入！流水号为: {new_id}。当前状态: {is_need_approve}")
                     st.rerun()
-
-    with v_tabs[1]:
-        st.markdown("#### 📅 今日发生的义工日记账清册")
-        t_str = date.today().strftime('%Y-%m-%d')
-        df_t = st.session_state.ledger[st.session_state.ledger['日期'] == t_str].copy()
-        
-        # 只保留浏览与导出的安全展示模式
-        st.dataframe(df_t, use_container_width=True)
-        
-        if not df_t.empty:
-            # 🌟 满足将本日日记账一键导出为纯 Excel 的完好保存功能
-            excel_buffer = io.BytesIO()
-            with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-                df_t.to_excel(writer, index=False, sheet_name="今日日记账")
+                    
+    with vol_w_tabs[1]:
+        st.markdown(f"#### 📖 **{st.session_state.vol_active_name}** 经手历史明细清册")
+        if df_vol.empty:
+            st.info("📭 您当前班次尚未录入任何日常收支流水。")
+        else:
+            st.dataframe(df_vol, use_container_width=True)
+            zip_data = make_zip_archive_selected(df_vol)
             st.download_button(
-                label="📥 导出今日日记账 (Excel 格式)",
-                data=excel_buffer.getvalue(),
-                file_name=f"昊天观义工日记账_{t_str}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "📥 导出本日日记账及配套凭证压缩包", 
+                data=zip_data, 
+                file_name=f"昊天观_日记账归档_{date.today().strftime('%Y%m%d')}.zip",
+                mime="application/zip",
                 use_container_width=True
             )
-        else:
-            st.info("今日暂无新入库日记账流水数据。")
 
 # ==============================================================================
-# 👑 权限模块三：FINANCE 财务总账 / TEMPLE_HEAD 当家住持 联合核算大盘 (完全未改动)
+# 🎮 权限模块三：FINANCE 财务主管工作台
 # ==============================================================================
-else:
-    title_display = current_user.get('title', '专业会计执事')
-    st.markdown(f"## ⛩️ {title_display}专业核算大盘")
-    tabs = st.tabs(["📝 规范化手工记账台", "📊 历史明细账档案馆", "📜 财务报表大盘", "🪵 借贷与债务风险追踪"])
+elif current_role == "finance":
+    st.markdown("## 📊 昊天观·专业规范化财务大盘 (符合《民间非营利组织会计制度》)")
     
-    with tabs[0]:
-        if current_role == "temple_head":
-            st.markdown("### 🏛️ 当家住持专属：内控审批与审计法盘")
-            df_pending_expense = st.session_state.ledger[st.session_state.ledger['审批状态'] == "等待住持审批"]
-            if df_pending_expense.empty:
-                st.info("太极清静，当前暂无等待审批的大额开支条目。")
-            else:
-                for idx in df_pending_expense.index:
-                    item = df_pending_expense.loc[idx]
-                    with st.expander(f"⚠️ 支出流水: {item['流水号']} | 科目: {item['二级科目']} | 金额: ￥{item['金额']:,} 元", expanded=True):
-                        st.write(f"**经手申请人**: {item['经手人']} | **摘要说明**: {item['备注']}")
-                        if item['二级科目'] == "接待费":
-                            st.warning(f"接待特定对象: {item.get('接待对象','未说明')} | 接待事由: {item.get('接待事由','未说明')}")
-                        ap_col1, ap_col2 = st.columns(2)
-                        if ap_col1.button("🟢 同意批准开支", key=f"app_y_{idx}"):
-                            st.session_state.ledger.loc[idx, '审批状态'] = "住持已批准"
-                            append_audit_log(current_user.get("username"), current_user.get("name"), f"住持批准了大额支出: {item['流水号']}")
-                            st.rerun()
-                        if ap_col2.button("🔴 不同意/驳回款项", key=f"app_n_{idx}"):
-                            st.session_state.ledger.loc[idx, '审批状态'] = "住持已驳回"
-                            append_audit_log(current_user.get("username"), current_user.get("name"), f"住持驳回了大额支出: {item['流水号']}")
-                            st.rerun()
-            st.markdown("---")
+    fin_tabs = st.tabs(["📑 智能精细分类账", "📈 三维动态多元报表(Excel导出)", "🪵 长周期借贷/融资契约录入"])
+    
+    with fin_tabs[0]:
+        st.markdown("#### 🔍 跨维度立体式分类账目检索提取")
+        df_l = st.session_state.ledger.copy()
         
-        st.markdown("### ✍️ 经办做账手工填报台")
-        selected_element = st.selectbox("1. 选择会计大类要素", list(ACCOUNTING_STRUCTURE.keys()), key="main_el_select")
-        c1_options = list(ACCOUNTING_STRUCTURE[selected_element].keys())
-        selected_c1 = st.selectbox("2. 一级会计科目", c1_options, key="main_c1_select")
-        c2_options = ACCOUNTING_STRUCTURE[selected_element][selected_c1]
-        selected_c2 = st.selectbox("3. 二级核算细目", c2_options, key="main_c2_select")
-
-        with st.form("manual_bookkeeping_form_fixed"):
-            f_date = st.date_input("记账日期", date.today())
-            f_amount = st.number_input("4. 发生业务金额 (元)", min_value=0.0, step=100.0)
-            f_person = st.text_input("5. 经手人/报销报账人签名")
-            f_memo = st.text_area("6. 业务事由详细描述说明")
-            f_file = st.file_uploader("7. 上传权威合规原始档案凭证", type=["pdf", "png", "jpg"])
-            
-            st.markdown("##### 🍽️ 宗教特定合规审查辅助区 (选填)")
-            rec_obj = st.text_input("特定接待对象 (如：外来参访团名称/学者专家)", "无")
-            rec_reason = st.text_input("公务接待特定事由说明", "无")
-            
-            if st.form_submit_button("🕊️ 确认无误·提交大盘总账"):
-                if f_amount <= 0 or not f_person or not f_memo:
-                    st.error("❌ 基础要素数据不齐，无法完成正式做账！")
-                elif selected_c2 == "接待费" and (rec_obj == "无" or rec_reason == "无"):
-                    st.error("❌ 依《宗教活动场所财务监督管理办法》，特殊接待支出必须严审并填写接待对象与事由！")
-                else:
-                    assigned_name = smart_rename_by_rules(f_date, selected_element, f_file)
-                    st.session_state.file_vault[assigned_name] = f_file.getvalue() if f_file else b"NO_DATA"
-                    f_id = f"HT-{f_date.strftime('%Y%m')}-{random.randint(100,999)}"
-                    app_status = "等待住持审批" if (selected_element == "支出类" and float(f_amount) >= 10000.0) else "无需审批"
-                    
-                    new_row = {
-                        '流水号': f_id, '日期': f_date.strftime('%Y-%m-%d'), '会计要素': selected_element, '一级科目': selected_c1, '二级科目': selected_c2,
-                        '金额': float(f_amount), '经手人': f_person, '凭证附件': assigned_name, '操作员': current_user.get('name'),
-                        '操作员电话': current_user.get('phone', 'N/A'), '备注': f_memo, '审批状态': app_status,
-                        '接待对象': rec_obj, '接待事由': rec_reason
-                    }
-                    st.session_state.ledger = pd.concat([st.session_state.ledger, pd.DataFrame([new_row])], ignore_index=True)
-                    append_audit_log(current_user.get('username'), current_user.get('name'), f"手工记账: {f_id} | 状态: {app_status}")
-                    st.success(f"🎉 成功做账！自小编号凭证卷宗：`{assigned_name}`")
-                    st.rerun()
-
-    with tabs[1]:
-        st.markdown("### 📊 昊天观历史明细总账电子档案")
-        c_col1, c_col2, c_col3 = st.columns(3)
-        q_start = c_col1.date_input("筛选：起始日期", date(2026, 1, 1))
-        q_end = c_col2.date_input("筛选：截止日期", date(2026, 12, 31))
-        kw_search = c_col3.text_input("输入流水的关键词/经手人模糊检索")
+        c_filter1, c_filter2, c_filter3 = st.columns(3)
+        q_start = c_filter1.date_input("起算交割日期", date(2026, 1, 1))
+        q_end = c_filter2.date_input("截至盘点日期", date(2026, 12, 31))
+        q_word = c_filter3.text_input("摘要及因缘检索词")
         
-        df_filter = st.session_state.ledger.copy()
-        df_filter['日期'] = pd.to_datetime(df_filter['日期']).dt.date
-        df_filter = df_filter[(df_filter['日期'] >= q_start) & (df_filter['日期'] <= q_end)]
-        if kw_search:
-            df_filter = df_filter[df_filter['备注'].str.contains(kw_search) | df_filter['经手人'].str.contains(kw_search)]
+        df_l['日期_dt'] = pd.to_datetime(df_l['日期']).dt.date
+        df_filtered = df_l[(df_l['日期_dt'] >= q_start) & (df_l['日期_dt'] <= q_end)]
+        if q_word:
+            df_filtered = df_filtered[df_filtered['备注'].str.contains(q_word, na=False) | df_filtered['流水号'].str.contains(q_word, na=False)]
             
-        if df_filter.empty:
-            st.info("在此过滤条件下未查询到任何明细账目数据。")
+        df_filtered = df_filtered.drop(columns=['日期_dt'], errors='ignore')
+        
+        if df_filtered.empty:
+            st.warning("⚠️ 盘查大盘结束，没有找到任何符合条件的账目要素。")
         else:
-            selected_rows = []
-            for idx in df_filter.index:
-                row = df_filter.loc[idx]
-                r_col1, r_col2 = st.columns([12, 1])
-                is_sel = r_col1.checkbox(f"流水号: {row['流水号']} | 日期: {row['日期']} | {row['会计要素']}->{row['二级科目']} | 金额: ￥{row['金额']:,} | 状态: {row['审批状态']} | 备注: {row['备注']}", value=True, key=f"ledger_chk_{idx}")
-                if row['凭证附件'] in st.session_state.file_vault:
-                    r_col2.download_button("📄 凭证", st.session_state.file_vault[row['凭证附件']], file_name=str(row['凭证附件']), key=f"dl_single_f_{idx}")
-                else:
-                    r_col2.write("无")
-                if is_sel:
-                    selected_rows.append(row)
-                    
-            if selected_rows:
-                df_export = pd.DataFrame(selected_rows)
-                st.markdown("---")
-                exp_zip = make_zip_archive_selected(df_export)
-                st.download_button("📥 批量打包导出选中的明细账目及对应凭证 (ZIP)", exp_zip, file_name="昊天观选定账目包.zip", mime="application/zip", use_container_width=True)
-
-    with tabs[2]:
-        st.markdown("### 📜 规范化财务报表大盘")
+            st.markdown(f"📊 **联立筛选出共 `{len(df_filtered)}` 条合规账簿记录：**")
+            
+            df_filtered.insert(0, "精选勾选标记", False)
+            edited_df = st.data_editor(
+                df_filtered,
+                column_config={"精选勾选标记": st.column_config.CheckboxColumn(help="勾选后打包导出对应的原始单据凭证卷宗")},
+                disabled=[c for c in df_filtered.columns if c != "精选勾选标记"],
+                use_container_width=True,
+                key="fin_editor_grid"
+            )
+            
+            st.markdown("---")
+            col_exp1, col_exp2 = st.columns(2)
+            
+            if col_exp1.button("🌟 一键勾选并提取全盘"):
+                full_zip = make_zip_archive_selected(df_filtered)
+                st.download_button("💾 点击立刻下发全盘账簿凭证.zip", data=full_zip, file_name="昊天观_精选全选账簿归档.zip", mime="application/zip")
+                st.stop()
+                
+            selected_rows = edited_df[edited_df["精选勾选标记"] == True]
+            if not selected_rows.empty:
+                selected_zip = make_zip_archive_selected(selected_rows.drop(columns=["精选勾选标记"]))
+                col_exp2.download_button(
+                    f"📦 导出已选的 {len(selected_rows)} 条账目凭证包", 
+                    data=selected_zip, 
+                    file_name="昊天观_有选择性账单凭证.zip", 
+                    mime="application/zip",
+                    use_container_width=True
+                )
+            else:
+                col_exp2.info("💡 勾选上表中左侧的多选框，可定制打包下载凭证文件。")
+                
+    with fin_tabs[1]:
+        st.markdown("#### 📊 智能会计报表决策大屏")
         rep_period = st.selectbox("请选择要生成的会计报表周期阶段", ["2026年05月度中盘报表", "2026年第二季度周期报表", "2026年年度决算预估总表"])
         
         df_l = st.session_state.ledger[st.session_state.ledger['审批状态'].isin(["无需审批", "住持已批准"])]
-        sum_asset = df_l[df_l['会计要素'] == '资产类']['金额'].sum() + 500000.0
+        
+        # 3. 【精准修改：初始化预设资产和净资产底数彻底清零（修改为 + 0.0）】
+        sum_asset = df_l[df_l['会计要素'] == '资产类']['金额'].sum() + 0.0
         sum_liab = df_l[df_l['会计要素'] == '负债类']['金额'].sum() + st.session_state.borrow_db['本金金额'].sum()
         sum_rev = df_l[df_l['会计要素'] == '收入类']['金额'].sum()
         sum_exp = df_l[df_l['会计要素'] == '支出类']['金额'].sum()
-        sum_net = sum_rev - sum_exp + 300000.0
+        sum_net = sum_rev - sum_exp + 0.0
         
         m_c1, m_c2, m_c3 = st.columns(3)
         m_c1.metric("1. 资产总计 (含期初及变动)", f"￥{sum_asset:,} 元")
         m_c2.metric("2. 负债总计 (含银行长线信贷)", f"￥{sum_liab:,} 元")
         m_c3.metric("3. 净资产运营期末总结余", f"￥{sum_net:,} 元")
         
-        st.markdown("##### 📉 业务活动收支结余动态走势")
-        df_report_view = pd.DataFrame({
-            '财务指标类别': ['功德捐赠与随喜总收入', '日常宗教与行政管理总支出', '当期业务结余差异值'],
-            '当期累计归集发生额(元)': [sum_rev, sum_exp, sum_rev - sum_exp]
-        })
-        st.table(df_report_view)
+        st.markdown("---")
+        st.markdown("#### ✨ AI 智能财务分析专家组看板报告")
+        if sum_asset == 0 and sum_liab == 0 and sum_rev == 0:
+            st.info("✨ **AI 分析**：当前账盘为空，系统处于纯净初始化开局状态，无异常变动。")
+        else:
+            if sum_liab > sum_asset * 0.6:
+                st.error(f"🚨 **资产负债率预警 ({sum_liab/max(1, sum_asset)*100:.1f}%)**：当前负债来源高企，主要由于包含银行长线借贷，请务必注意功德收入现金流，防范宗教场所周转债务熔断风险。")
+            else:
+                st.success("🟢 **财务健壮度评估**：当前负债率处于合理安全界限内，非限定性日常收支累计运行状况良好。建议继续对法会等大宗经营收入实施严密审计。")
+                
+        out_excel = io.BytesIO()
+        with pd.ExcelWriter(out_excel, engine='openpyxl') as wr:
+            pd.DataFrame([{"指标名称": "资产总计", "计算值": sum_asset}, {"指标名称": "负债总计", "计算值": sum_liab}, {"指标名称": "净资产总结余", "计算值": sum_net}]).to_excel(wr, index=False, sheet_name="核心摘要")
+            df_l.to_excel(wr, index=False, sheet_name="参与计算的过账明细")
+        st.download_button(f"📥 导出标准 Excel 格式【{rep_period}】", data=out_excel.getvalue(), file_name=f"昊天观_业务报表_{rep_period}.xlsx")
         
-        excel_rep = io.BytesIO()
-        with pd.ExcelWriter(excel_rep, engine='openpyxl') as wr:
-            df_report_view.to_excel(wr, index=False, sheet_name="核心业务收支表")
-        st.download_button("📊 提取此阶段规范财务平衡报表(Excel)", excel_rep.getvalue(), file_name=f"{rep_period}.xlsx", use_container_width=True)
+    with fin_tabs[2]:
+        st.markdown("#### 🪵 长期借款 / 融资契约契约立项")
+        with st.form("loan_reg_form"):
+            b_id = f"HT-LOAN-{date.today().strftime('%Y%m')}-{random.randint(10,99)}"
+            b_dir = st.selectbox("借贷融通流动方向", ["借入(负债)", "借出(债权)"])
+            b_person = st.text_input("债权/债务往来对应单位名称(例如: 城固商业银行)")
+            b_amt = st.number_input("融资本金金额 (元)", min_value=0.0)
+            b_rate = st.number_input("协议设定年化利率 (%)", min_value=0.0, max_value=24.0, value=3.85)
+            b_limit = st.date_input("契约承诺法定期限到期还款日", date.today())
+            b_memo = st.text_area("长周期利息结算或资金用途备注")
+            b_file = st.file_uploader("上传已签署盖章的借贷原始合同扫描件", type=["pdf", "jpg", "png"])
+            
+            st.info("✨ **AI 智能辅助已常驻守护**：系统上传合同后，后台将自动智能辅助扫描复核本息、经办人、到期日，杜绝人工录入笔误。")
+            
+            if st.form_submit_button("🪵 呈报住持审核"):
+                if not b_person or b_amt <= 0:
+                    st.error("❌ 融资本金或债权债务单位信息不全，无法呈报！")
+                else:
+                    c_name = b_file.name if b_file else "未传合同.pdf"
+                    if b_file:
+                        st.session_state.file_vault[c_name] = b_file.getvalue()
+                        
+                    new_loan = {
+                        '合同单号': b_id, '借贷方向': b_dir, '债权/债务人': b_person, '本金金额': float(b_amt), \
+                        '年化利率(%)': float(b_rate), '签署日期': date.today().strftime('%Y-%m-%d'), \
+                        '到期时限': b_limit.strftime('%Y-%m-%d'), '经办人': current_user.get('name'), \
+                        '凭证附件': c_name, '审批状态': "等待住持审核", '备注': b_memo
+                    }
+                    st.session_state.borrow_db = pd.concat([st.session_state.borrow_db, pd.DataFrame([new_loan])], ignore_index=True)
+                    append_audit_log(current_user['username'], current_user['name'], f"发起重大资产长周期借贷立项: {b_id}, 金额: {b_amt}")
+                    st.success(f"🟢 Major 借贷申请已投递！请通知李住持进行终审批红划线录入。")
+                    st.rerun()
 
-    with tabs[3]:
-        st.markdown("### 🪵 观内融资借贷与债务存续法律契约风险追踪")
-        st.dataframe(st.session_state.borrow_db, use_container_width=True)
+# ==============================================================================
+# 🎮 权限模块四：TEMPLE_HEAD 当家住持至高大盘
+# ==============================================================================
+elif current_role == "temple_head":
+    st.markdown("## ☯️ 昊天观·住持大德法眼审批天盘")
+    
+    df_pending_ledger = st.session_state.ledger[st.session_state.ledger['审批状态'] == "等待住持审核"]
+    df_pending_loan = st.session_state.borrow_db[st.session_state.borrow_db['审批状态'] == "等待住持审核"]
+    
+    head_tabs = st.tabs([f"📥 收支审批批红 [{len(df_pending_ledger)}]", f"🪵 融资重大合同批红 [{len(df_pending_loan)}]", "📜 全盘账目宏观法眼监察"])
+    
+    with head_tabs[0]:
+        if df_pending_ledger.empty:
+            st.success("🟢 功德无量！当前没有任何被积压的超过1万元的大额日常收支申请。")
+        else:
+            for idx, r in df_pending_ledger.iterrows():
+                with st.expander(f"流水单号: {r['流水号']} | 金额: ￥{r['金额']:,} 元 | 填报操作人: {r['经手人']}"):
+                    st.write(f"**业务大类要素**：{r['会计要素']} -> {r['一级科目']} -> {r['二级科目']}")
+                    st.write(f"**业务说明**：{r['备注']}")
+                    st.markdown(f"**💡 业务招待透明公开核查**：接待对象：`{r['接待对象']}` | 接待因由：`{r['接待事由']}`")
+                    if r['凭证附件'] in st.session_state.file_vault:
+                        st.download_button(f"📄 查看/下载原始法定的凭证档案 [{r['凭证附件']}]", data=st.session_state.file_vault[r['凭证附件']], file_name=r['凭证附件'], key=f"btn_dl_{r['流水号']}")
+                    else:
+                        st.warning("⚠️ 该项未附带任何可供核查的文件。")
+                        
+                    c_b1, c_b2 = st.columns(2)
+                    if c_b1.button("🟢 依例准予批红过账", key=f"app_{r['流水号']}"):
+                        st.session_state.ledger.loc[idx, '审批状态'] = "住持已批准"
+                        append_audit_log(current_user['username'], current_user['name'], f"大额收支批红通过: {r['流水号']}")
+                        st.success("已批红。")
+                        st.rerun()
+                    if c_b2.button("❌ 驳回要求重新核算", key=f"rej_{r['流水号']}"):
+                        st.session_state.ledger.loc[idx, '审批状态'] = "住持已驳回"
+                        append_audit_log(current_user['username'], current_user['name'], f"大额收支不合规驳回: {r['流水号']}")
+                        st.error("已驳回。")
+                        st.rerun()
+                        
+    with head_tabs[1]:
+        if df_pending_loan.empty:
+            st.success("🟢 清净无碍！当前无积压的重大信贷融资合同。")
+        else:
+            for idx, r in df_pending_loan.iterrows():
+                with st.expander(f"契约号: {r['合同单号']} | 融资本金: ￥{r['本金金额']:,} 元 | 协议单位: {r['债权/债务人']}"):
+                    st.write(f"**借贷性质**：{r['借贷方向']} | 约定年化利息率：`{r['年化利率(%)']}%`")
+                    st.write(f"**还款期限目标**：{r['到期时限']} | 筹措人陈述：{r['备注']}")
+                    if r['凭证附件'] in st.session_state.file_vault:
+                        st.download_button("📂 下载审查合同全彩扫描件", data=st.session_state.file_vault[r['凭证附件']], file_name=r['凭证附件'], key=f"loan_dl_{r['合同单号']}")
+                    
+                    c_l1, c_l2 = st.columns(2)
+                    if c_l1.button("☯️ 准予立契签约过账", key=f"loan_app_{r['合同单号']}"):
+                        st.session_state.borrow_db.loc[idx, '审批状态'] = "住持已批准"
+                        append_audit_log(current_user['username'], current_user['name'], f"重大长期契约批红准予立项: {r['合同单号']}")
+                        st.success("重大合同已签署过账。")
+                        st.rerun()
+                    if c_l2.button("❌ 认为利息过高/有因果驳回", key=f"loan_rej_{r['合同单号']}"):
+                        st.session_state.borrow_db.loc[idx, '审批状态'] = "住持已驳回"
+                        append_audit_log(current_user['username'], current_user['name'], f"重大长期借贷契约被住持法眼驳回: {r['合同单号']}")
+                        st.error("借贷申请已被斩断驳回。")
+                        st.rerun()
+                        
+    with head_tabs[2]:
+        st.markdown("#### 监察大盘所有流动性账簿明细")
+        if st.session_state.ledger.empty:
+            st.info("总账清空，无数据。")
+        else:
+            st.dataframe(st.session_state.ledger, use_container_width=True)
+            st.markdown("#### 长周期融资性借贷契约簿档案")
+            st.dataframe(st.session_state.borrow_db, use_container_width=True)
