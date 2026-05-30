@@ -31,23 +31,41 @@ if 'bg_img_url' not in st.session_state:
 if 'op_theme_color' not in st.session_state:
     st.session_state.op_theme_color = saved_theme
 
-# --- 3. 动态 CSS 视觉控制 ---
-st.markdown(f"""
-    <style>
-    .stApp {{ background-color: {st.session_state.op_theme_color} !important; color: #2F2F2F; }}
-    [data-testid="stSidebar"] {{ background-color: #F5F5DC !important; border-right: 2px solid #8B4513; }}
-    h1, h2, h3 {{ color: #8B0000 !important; font-family: 'Kaiti', 'STKaiti', 'serif'; }}
-    [data-testid="stMetricValue"] {{ color: #8B0000 !important; font-weight: bold; }}
-    .stButton>button {{ background-color: #8B0000; color: white; border-radius: 5px; border: 1px solid #D2691E; }}
-    .stAlert {{ background-color: #FFF8DC; border: 1px solid #D2691E; }}
-    [data-testid="stForm"], .stForm, div[data-testid="stContainer"] {{ background-color: #FFFFFF !important; padding: 20px; border-radius: 10px; border: 1px solid #E0DDC8; }}
-    </style>
-    """, unsafe_allow_html=True)
+# --- 3. 动态 CSS 权限隔离视觉控制（✨极致修复：完美确保登录前背景百分百显现） ---
+if not st.session_state.get('logged_in', False):
+    # 🔒 未登录状态：强制铺满居士指定的洗练国风背景图
+    st.markdown(f"""
+        <style>
+        .stApp {{ 
+            background-image: url("{st.session_state.bg_img_url}") !important;
+            background-size: cover !important; 
+            background-position: center !important; 
+            background-attachment: fixed !important; 
+            color: #2F2F2F; 
+        }}
+        h1, h2, h3 {{ color: #8B0000 !important; font-family: 'Kaiti', 'STKaiti', 'serif'; text-shadow: 1px 1px 2px white; }}
+        .stButton>button {{ background-color: #8B0000; color: white; border-radius: 5px; border: 1px solid #D2691E; }}
+        [data-testid="stForm"], .stForm, div[data-testid="stContainer"] {{ background-color: rgba(255, 255, 255, 0.94) !important; padding: 25px; border-radius: 12px; box-shadow: 0px 4px 15px rgba(0,0,0,0.3); }}
+        </style>
+        """, unsafe_allow_html=True)
+else:
+    # 🔓 已登录状态：切回干净护眼的财务工作台纯色调，保障看账不刺眼
+    st.markdown(f"""
+        <style>
+        .stApp {{ background-color: {st.session_state.op_theme_color} !important; background-image: none !important; color: #2F2F2F; }}
+        [data-testid="stSidebar"] {{ background-color: #F5F5DC !important; border-right: 2px solid #8B4513; }}
+        h1, h2, h3 {{ color: #8B0000 !important; font-family: 'Kaiti', 'STKaiti', 'serif'; }}
+        [data-testid="stMetricValue"] {{ color: #8B0000 !important; font-weight: bold; }}
+        .stButton>button {{ background-color: #8B0000; color: white; border-radius: 5px; border: 1px solid #D2691E; }}
+        .stAlert {{ background-color: #FFF8DC; border: 1px solid #D2691E; }}
+        [data-testid="stForm"], .stForm, div[data-testid="stContainer"] {{ background-color: #FFFFFF !important; padding: 20px; border-radius: 10px; border: 1px solid #E0DDC8; }}
+        </style>
+        """, unsafe_allow_html=True)
 
 # --- 4. 标准会计级联字典 ---
 ACCOUNTING_STRUCTURE = {
     "收入类": {
-        "捐赠收入": ["信众随喜功德款", "修缮专项捐款", "大殿功德箱款"],
+        "捐赠收入": ["信众随喜功德款", "修缮专项捐款", "大殿功功德箱款"],
         "提供服务收入": ["斋醮祈福法务收入", "牌位供奉收入"],
         "商品销售收入": ["法物结缘收入"]
     },
@@ -79,14 +97,12 @@ if 'ledger' not in st.session_state:
     ]
     st.session_state.ledger = pd.DataFrame(test_data)
 
-# ✨ 彻底保证 borrow_db 拥有完整的初始化列，解决 KeyError 报错
 if 'borrow_db' not in st.session_state:
     test_borrow = [
         {'合同单号': 'HT-CONTRACT-001', '签署日期': '2026-02-15', '债权人': '城固商业银行', '借款总额': 500000.0, '已还金额': 200000.0, '本金还款时限': '2026-12-31', '凭证附件': '借款合同_2026021501.pdf', '备注': '筹措斋堂扩建工程款'}
     ]
     st.session_state.borrow_db = pd.DataFrame(test_borrow)
 else:
-    # 兜底确保运行中字段完备
     if '凭证附件' not in st.session_state.borrow_db.columns:
         st.session_state.borrow_db['凭证附件'] = None
 
@@ -108,17 +124,13 @@ def log_action(username, operator_name, action_type, detail):
     new_log = {'时间': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '账号': username, '责任人': operator_name, '操作类型': action_type, '明细内容': detail}
     st.session_state.audit_logs = pd.concat([st.session_state.audit_logs, pd.DataFrame([new_log])], ignore_index=True)
 
-# ✨【智能引擎：专职处理根据文件和说明进行重新命名的逻辑】
 def smart_rename_only(f_date, f_memo, uploaded_file, manual_element):
     date_str = f_date.strftime('%Y%m%d')
-    
-    # 优先根据会计要素或详细说明推导前缀
     if manual_element in ["收入类", "负债类", "净资产类"] or any(k in f_memo for k in ["收入", "结缘", "功德", "随喜", "收款"]):
         doc_type = "收据"
     else:
         doc_type = "发票"
 
-    # 计算当天该类型已有数量
     all_attachments = []
     if not st.session_state.ledger.empty and '凭证附件' in st.session_state.ledger.columns:
         all_attachments += list(st.session_state.ledger['凭证附件'].dropna())
@@ -137,10 +149,8 @@ def smart_rename_only(f_date, f_memo, uploaded_file, manual_element):
                 
     ext = os.path.splitext(uploaded_file.name)[1] if uploaded_file else ".jpg"
     if not ext: ext = ".jpg"
-    
     return f"{doc_type}_{date_str}{str(day_count).zfill(2)}{ext}"
 
-# ✨【凭证安全预览与动态分发模态大厅】
 @st.dialog("☯️ 昊天观·国家级会计凭证档案查阅室")
 def preview_and_download_dialog(filename):
     st.write(f"📁 **当前调阅凭证卷宗：** `{filename}`")
@@ -164,17 +174,23 @@ def preview_and_download_dialog(filename):
 
 # --- 6. 登录控制台 ---
 if not st.session_state.logged_in:
-    st.markdown("<h1 style='text-align: center; margin-top: 80px;'>⛩️ 昊天观财务管理系统</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; margin-top: 100px;'>⛩️ 昊天观财务管理系统</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #FFF; text-shadow: 1px 1px 3px black; font-size: 1.2rem;'>规范化宗教场所账目统筹中心</p>", unsafe_allow_html=True)
+    
     col1, col2, col3 = st.columns([1, 1.1, 1])
     with col2:
-        input_user = st.text_input("管理账号")
-        input_pwd = st.text_input("管理密码", type="password")
-        if st.button("🔐 进入账簿", type="primary", use_container_width=True):
-            if input_user in st.session_state.user_db and st.session_state.user_db[input_user]["password"] == input_pwd:
-                st.session_state.logged_in = True
-                st.session_state.current_user = st.session_state.user_db[input_user].copy()
-                st.session_state.current_user["username"] = input_user
-                st.rerun()
+        with st.form("login_gate"):
+            st.markdown("### 🔒 安全验证登录大厅")
+            input_user = st.text_input("管理账号", placeholder="volunteer / finance / haotianguan")
+            input_pwd = st.text_input("管理密码", type="password")
+            if st.form_submit_button("🔐 安全交班，进入账簿", use_container_width=True):
+                if input_user in st.session_state.user_db and st.session_state.user_db[input_user]["password"] == input_pwd:
+                    st.session_state.logged_in = True
+                    st.session_state.current_user = st.session_state.user_db[input_user].copy()
+                    st.session_state.current_user["username"] = input_user
+                    st.rerun()
+                else:
+                    st.error("❌ 账户密匙不匹配，请重新输入。")
     st.stop()
 
 current_user = st.session_state.current_user
@@ -186,19 +202,16 @@ if st.sidebar.button("🚪 安全交班", use_container_width=True):
 tabs = st.tabs(["📝 凭证分类账手工记账登记", "🔍 历史凭证解释与检索", "📊 科目明细分类账", "📜 年度整体财务报表", "🪵 观内借贷债务追踪大厅"])
 
 # ------------------------------------------
-# 1. 凭证分类手工记账中心（✨重新引入完整级联科目体系选择）
+# 1. 凭证分类手工记账中心
 # ------------------------------------------
 with tabs[0]:
     st.markdown("### 📝 分类凭证AI智能辅助记账台")
     col_a, col_b = st.columns(2)
     with col_a:
         f_date = st.date_input("1. 变动日期", date.today())
-        
-        # ✨【完美重现：基础会计科目体系选择】
         f_el = st.selectbox("2. 会计要素大类", list(ACCOUNTING_STRUCTURE.keys()))
         f_c1 = st.selectbox("3. 一级科目", list(ACCOUNTING_STRUCTURE[f_el].keys()))
         f_c2 = st.selectbox("4. 二级明细细目", ACCOUNTING_STRUCTURE[f_el][f_c1])
-        
         f_amount = st.number_input("5. 变动金额 (元)", min_value=0.0, step=100.0)
         f_person = st.text_input("6. 功德主/经手人")
         
@@ -210,10 +223,7 @@ with tabs[0]:
         if not f_memo:
             st.error("❌ 请务必填写详细说明，以便系统与AI为您精准进行重新编号命名！")
         else:
-            # ✨ 仅进行智能重新命名编号，不篡改用户精心勾选的会计科目
             assigned_filename = smart_rename_only(f_date, f_memo, f_file, f_el)
-            
-            # 存入虚拟档案库
             if f_file:
                 st.session_state.file_vault[assigned_filename] = f_file.getvalue()
             
@@ -305,10 +315,10 @@ with tabs[4]:
     active_debts = st.session_state.borrow_db.copy()
     st.dataframe(active_debts, use_container_width=True)
     
-    # ✨ 这里的列名引用已经过上方初始化加固，绝不再报 KeyError 错误
     if not active_debts.empty and '凭证附件' in active_debts.columns:
         debt_files = active_debts['凭证附件'].dropna().unique()
         if len(debt_files) > 0:
             target_debt_file = st.selectbox("查阅并核对本笔债务的原始借贷合同/凭证：", debt_files, key="debt_download_select")
             if st.button("👁️ 弹出借贷原始合同镜像", key="btn_debt_dl", use_container_width=True):
                 preview_and_download_dialog(target_debt_file)
+                                    
