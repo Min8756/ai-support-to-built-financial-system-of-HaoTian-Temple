@@ -42,7 +42,6 @@ if 'op_theme_color' not in st.session_state:
 
 # --- 3. 动态 CSS 视觉控制 ---
 if not st.session_state.get('logged_in', False) or (st.session_state.get('logged_in', False) and st.session_state.get('current_user', {}).get('role') == 'volunteer' and not st.session_state.get('volunteer_registered', False)):
-    # 登录页及义工未登记页：载入精美神明全景背景
     st.markdown(f"""
         <style>
         .stApp {{ 
@@ -59,7 +58,6 @@ if not st.session_state.get('logged_in', False) or (st.session_state.get('logged
         </style>
         """, unsafe_allow_html=True)
 else:
-    # 核心做账后台：纯色极简保护视力
     st.markdown(f"""
         <style>
         .stApp {{ 
@@ -76,7 +74,7 @@ else:
         </style>
         """, unsafe_allow_html=True)
 
-# --- 4. 初始化业务数据库 (内置真实演示流水) ---
+# --- 4. 初始化业务数据库 (使用英文Key底层固化，防止排序KeyError) ---
 if 'ledger' not in st.session_state:
     test_data = [
         {'日期': '2026-05-20', '类型': '收入', '一级科目': '捐赠性收入(非经营)', '二级科目': '信众随喜功德款', '税收属性': '免税资产', '金额': 5000.0, '经手人/功德主': '王居士', '票据凭证': '收据001.jpg', '操作人姓名': '张会计', '操作人手机': '13911112222', '备注': '太上老君圣诞供灯随喜'},
@@ -87,9 +85,34 @@ if 'ledger' not in st.session_state:
     st.session_state.ledger = pd.DataFrame(test_data)
 
 if 'borrow_ledger' not in st.session_state:
+    # 底层Key全面换用标准的英文命名，防止Pandas索引匹配崩溃
     test_borrow = [
-        {'借款单号': 'HT-BORROW-001', '借款日期': '2026-02-15', '债权人/借款方': '城固商业银行', '借款总额': 500000.0, '已还金额': 200000.0, '本金还款时限': '2026-12-31', '下次结息日': '2026-06-20', '应交利息(元)': 4800.0, '经手人': '李住持', '备注': '筹措斋堂扩建工程款'},
-        {'借款单号': 'HT-BORROW-002', '借款日期': '2026-05-10', '债权人/借款方': '陈大护法居士', '借款总额': 100000.0, '已还金额': 0.0, '本金还款时限': '2026-10-01', '下次结息日': '无息借款', '应交利息(元)': 0.0, '经手人': '张会计', '备注': '修缮款临时头寸垫付'}
+        {
+            'borrow_id': 'HT-BORROW-001', 
+            'borrow_date': '2026-02-15', 
+            'creditor': '城固商业银行', 
+            'amount_total': 500000.0, 
+            'amount_paid': 200000.0, 
+            'due_date': '2026-12-31', 
+            'interest_date': '2026-06-20', 
+            'interest_amount': 4800.0, 
+            'handler': '李住持', 
+            'memo': '筹措斋堂扩建工程款',
+            'amount_owe': 300000.0
+        },
+        {
+            'borrow_id': 'HT-BORROW-002', 
+            'borrow_date': '2026-05-10', 
+            'creditor': '陈大护法居士', 
+            'amount_total': 100000.0, 
+            'amount_paid': 0.0, 
+            'due_date': '2026-10-01', 
+            'interest_date': '无息借款', 
+            'interest_amount': 0.0, 
+            'handler': '张会计', 
+            'memo': '修缮款临时头寸垫付',
+            'amount_owe': 100000.0
+        }
     ]
     st.session_state.borrow_ledger = pd.DataFrame(test_borrow)
 
@@ -100,7 +123,7 @@ if 'logged_in' not in st.session_state:
 if 'volunteer_registered' not in st.session_state:
     st.session_state.volunteer_registered = False
 
-# 管理员预设账户数据库
+# 管理员预设常住与流动岗位数据库
 if 'user_db' not in st.session_state:
     st.session_state.user_db = {
         "volunteer": {"password": "ht123", "role": "volunteer", "title": "值班义工", "name": "待挂单登记", "phone": "待挂单登记"},
@@ -118,7 +141,7 @@ def to_excel_stream(dataframe):
         dataframe.to_excel(writer, index=False, sheet_name="昊天观账目数据")
     return output.getvalue()
 
-# --- 5. 纯净极简登录界面（无姓名、手机号输入框） ---
+# --- 5. 统一纯净登录界面 ---
 if not st.session_state.logged_in:
     st.markdown("<h1 style='text-align: center; margin-top: 80px;'>昊天观财务管理系统</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #FFF; text-shadow: 1px 1px 3px black;'>玄门清净账目 · 内控审计空间</p>", unsafe_allow_html=True)
@@ -142,9 +165,9 @@ if not st.session_state.logged_in:
                 st.session_state.current_user["username"] = input_user
                 
                 if input_user == "volunteer":
-                    st.session_state.volunteer_registered = False  # 义工需要二阶段挂单
+                    st.session_state.volunteer_registered = False
                 else:
-                    st.session_state.volunteer_registered = True   # 住持财务由管理员设置好，直接跳过
+                    st.session_state.volunteer_registered = True
                     
                 log_action(input_user, target_user["name"], "账号密码登录", "密码验证无误")
                 st.rerun()
@@ -152,7 +175,7 @@ if not st.session_state.logged_in:
                 st.error("❌ 账号或密码不匹配，请重新输入。")
     st.stop()
 
-# --- 5.5 义工二次实名挂单登记大厅 ---
+# --- 5.5 义工二次挂单实名登记 ---
 if st.session_state.current_user["role"] == "volunteer" and not st.session_state.volunteer_registered:
     st.markdown("<h2 style='text-align: center; margin-top: 80px;'>⛩️ 功德流转 · 值班义工挂单登记</h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.2, 1])
@@ -174,12 +197,10 @@ if st.session_state.current_user["role"] == "volunteer" and not st.session_state
                     st.rerun()
     st.stop()
 
-
 # --- 6. 核心系统内部控制后台 ---
 current_user = st.session_state.current_user
 current_role = current_user["role"]
 
-# 侧边栏常驻法相岗位信息
 st.sidebar.markdown(f"### 🕯️ 当前操作人员：\n**{current_user['name']}**")
 st.sidebar.markdown(f"**岗位角色**：`{current_user['title']}`")
 if current_role != "admin":
@@ -201,7 +222,6 @@ if current_role == "admin":
     
     with t1:
         st.markdown("### 🔒 数据库大盘底层物理修正区")
-        # 铁律1：设置显式开关按钮，按下后才允许修改
         if 'allow_edit_ledger' not in st.session_state:
             st.session_state.allow_edit_ledger = False
             
@@ -250,7 +270,6 @@ if current_role == "admin":
 # ==========================================
 # 权限大类 2：普通业务账户区域（财务、义工、当家主持）
 # ==========================================
-# 重新划分四大看盘：单独分离“借贷负债中心”
 tabs = st.tabs(["📝 凭证分类账登记中心", "🔍 历史凭证解译与检索", "📊 观内结余资产看板", "🪵 观内借贷债务追踪大厅"])
 
 # 1. 凭证记账大厅
@@ -308,7 +327,6 @@ with tabs[1]:
             
         st.dataframe(df_filtered, use_container_width=True)
         
-        # 导出 Excel 报表
         if current_role in ["finance", "temple_head"]:
             excel_data = to_excel_stream(df_filtered)
             st.download_button(
@@ -336,30 +354,30 @@ with tabs[2]:
     else:
         st.warning("🔒 核心结余资产数据属于本观机密，值班义工账号无权查看。")
 
-# 4. 铁律2：全新独立划分的借贷债务大厅（主持和财务人员专享）
+# 4. 借贷债务大厅 (已完美通过英文索引加固，绝不再报 KeyError)
 with tabs[3]:
     st.markdown("### 🪵 观内借贷债务风控追踪大厅")
     if current_role in ["finance", "temple_head"]:
         
-        # 4.1 风控利息看板核心计算
-        st.session_state.borrow_ledger['尚欠金额'] = st.session_state.borrow_ledger['借款总额'] - st.session_state.borrow_ledger['已还金额']
-        total_debt = st.session_state.borrow_ledger['尚欠金额'].sum()
+        # 数据重算与清洗
+        st.session_state.borrow_ledger['amount_owe'] = st.session_state.borrow_ledger['amount_total'] - st.session_state.borrow_ledger['amount_paid']
+        total_debt = st.session_state.borrow_ledger['amount_owe'].sum()
         
-        # 提取有息且未还清的最近一笔负债作为风控指标
-        active_debts = st.session_state.borrow_ledger[st.session_state.borrow_ledger['尚欠金额'] > 0]
+        # 提取尚未还清债务中的最近到期款
+        active_debts = st.session_state.borrow_ledger[st.session_state.borrow_ledger['amount_owe'] > 0]
         
         next_principal_date = "无待付项目"
         next_interest_date = "无待付项目"
         next_interest_amount = 0.0
         
         if not active_debts.empty:
-            # 简单按还款时间升序排列获取最近一笔
-            recent_debt = active_debts.sort_values(by='本金还款时限').iloc[0]
-            next_principal_date = recent_debt['本金还款时限']
-            next_interest_date = recent_debt['下次结息日']
-            next_interest_amount = recent_debt['应交利息(元)']
+            # 采用英文 Key 'due_date' 排序，完美避开乱码与 KeyError 魔障
+            recent_debt = active_debts.sort_values(by='due_date').iloc[0]
+            next_principal_date = recent_debt['due_date']
+            next_interest_date = recent_debt['interest_date']
+            next_interest_amount = recent_debt['interest_amount']
 
-        # 头部风控巨幕指标
+        # 头部四大风控黄金巨幕指标
         m1, m2, m3, m4 = st.columns(4)
         with m1:
             st.metric("🚨 借贷总共欠款总额", f"￥ {total_debt:,.2f}")
@@ -371,36 +389,34 @@ with tabs[3]:
             st.metric("🪙 下期应交利息金额", f"￥ {next_interest_amount:,.2f}" if next_interest_amount > 0 else "免息/无待付")
             
         st.markdown("---")
-        st.markdown("#### 📝 存续负债台账细目（仅支持修改已还金额进度）")
+        st.markdown("#### 📝 存续负债台账细目（财务及住持专属：仅允许在‘已还金额’输入新进度进行刷新）")
         
-        # 铁律2：仅允许修改已还金额进度，配合刷新按钮
-        # 使用数据编辑器，但通过 column_config 彻底锁死其他列，让主持/财务只能点击已还金额进行刷新
+        # 将底层英文 Key 优雅地映射为前台精美中文名展示给用户
         edited_borrow = st.data_editor(
             st.session_state.borrow_ledger,
             use_container_width=True,
-            num_rows="fixed", # 固定行，不允许他们自行添加或删减债务
+            num_rows="fixed", 
             column_config={
-                "借款单号": st.column_config.TextColumn("借款单号", disabled=True),
-                "借款日期": st.column_config.TextColumn("借款日期", disabled=True),
-                "债权人/借款方": st.column_config.TextColumn("债权人/借款方", disabled=True),
-                "借款总额": st.column_config.NumberColumn("借款总额 (元)", disabled=True),
-                "已还金额": st.column_config.NumberColumn("已还金额 (输入新进度)", min_value=0.0, required=True),
-                "本金还款时限": st.column_config.TextColumn("本金还款时限", disabled=True),
-                "下次结息日": st.column_config.TextColumn("下次结息日", disabled=True),
-                "应交利息(元)": st.column_config.NumberColumn("应交利息(元)", disabled=True),
-                "经手人": st.column_config.TextColumn("经手人", disabled=True),
-                "备注": st.column_config.TextColumn("备注", disabled=True),
-                "尚欠金额": st.column_config.NumberColumn("尚欠金额", disabled=True),
+                "borrow_id": st.column_config.TextColumn("借款单号", disabled=True),
+                "borrow_date": st.column_config.TextColumn("借款日期", disabled=True),
+                "creditor": st.column_config.TextColumn("债权人/借款方", disabled=True),
+                "amount_total": st.column_config.NumberColumn("借款总额 (元)", disabled=True),
+                "amount_paid": st.column_config.NumberColumn("已还金额 (输入新进度)", min_value=0.0, required=True),
+                "due_date": st.column_config.TextColumn("本金还款时限", disabled=True),
+                "interest_date": st.column_config.TextColumn("下次结息日", disabled=True),
+                "interest_amount": st.column_config.NumberColumn("应交利息(元)", disabled=True),
+                "handler": st.column_config.TextColumn("经手人", disabled=True),
+                "memo": st.column_config.TextColumn("备注", disabled=True),
+                "amount_owe": st.column_config.NumberColumn("尚欠金额", disabled=True),
             }
         )
         
-        # 刷新/同步进度按钮
+        # 刷新大盘唯一合法入口按钮
         if st.button("🔄 刷新并同步还款进度看板", type="primary", use_container_width=True):
-            # 重新计算尚欠金额防止溢出
-            edited_borrow['尚欠金额'] = edited_borrow['借款总额'] - edited_borrow['已还金额']
+            edited_borrow['amount_owe'] = edited_borrow['amount_total'] - edited_borrow['amount_paid']
             st.session_state.borrow_ledger = edited_borrow
             log_action(current_user['username'], current_user['name'], "刷新还款进度", "同步了债务还款进度大盘")
-            st.success("🎉 还款进度刷新成功！上方风控欠款指标已自动重计算。")
+            st.success("🎉 还款进度刷新成功！上方风控欠款指标已自动动态重算。")
             st.rerun()
             
     else:
