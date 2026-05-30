@@ -107,7 +107,7 @@ if 'ledger' not in st.session_state:
         {
             '流水号': 'HT-202605-001', '日期': '2026-05-30', '会计要素': '收入类', '一级科目': '4001 功德捐赠收入——非限定性', '二级科目': '日常投入功德箱',
             '金额': 5000.0, '经手人': '妙音居士', '凭证附件': '收据_2026053001.jpg', '操作员': '张会计', '操作员电话': '13800001111',
-            '备注': '香客自愿投递功德箱结余', '审批状态': '无需审批', '接待对象': '无', '接待事由': '无'
+            '备注': '香客自愿投递功功德箱结余', '审批状态': '无需审批', '接待对象': '无', '接待事由': '无'
         },
         {
             '流水号': 'HT-202605-002', '日期': '2026-05-30', '会计要素': '支出类', '一级科目': '5201 管理费用', '二级科目': '水电燃气费',
@@ -234,7 +234,7 @@ if not st.session_state.logged_in:
                         st.error("❌ 密码配钥失败或该账号未注册。")
                     st.stop()
 
-# 安全规范获取用户信息，彻底消除 `KeyError` 隐患
+# 安全规范获取用户信息
 current_user = st.session_state.current_user
 current_role = current_user.get("role", "volunteer")
 st.sidebar.markdown(f"### 🕯️ 执事人：{current_user.get('name', '匿名用户')}")
@@ -270,20 +270,16 @@ if current_role == "admin":
             with st.form("adm_modify_form"):
                 ed_date = st.text_input("账目日期", str(row_data['日期']))
                 
-                # ==============================================================================
-                # 🛠️ 管理员账号：实现严格的多级过滤联动，隔离资产类
-                # ==============================================================================
+                # 🛠️ 管理员特权修缮联动逻辑：精准过滤，彻底杜绝资产类误显示
                 ed_el = st.selectbox("会计要素大类", list(ACCOUNTING_STRUCTURE.keys()), index=list(ACCOUNTING_STRUCTURE.keys()).index(row_data['会计要素']) if row_data['会计要素'] in ACCOUNTING_STRUCTURE else 0, key="adm_el")
                 
                 adm_c1_opts = list(ACCOUNTING_STRUCTURE[ed_el].keys())
-                # 尽量匹配历史的一级科目名称
                 adm_c1_default = adm_c1_opts.index(row_data['一级科目']) if row_data['一级科目'] in adm_c1_opts else 0
                 ed_c1 = st.selectbox("一级科目(对应要素)", adm_c1_opts, index=adm_c1_default, key="adm_c1")
                 
                 adm_c2_opts = ACCOUNTING_STRUCTURE[ed_el][ed_c1]
                 adm_c2_default = adm_c2_opts.index(row_data['二级科目']) if row_data['二级科目'] in adm_c2_opts else 0
                 ed_c2 = st.selectbox("二级科目", adm_c2_opts, index=adm_c2_default, key="adm_c2")
-                # ==============================================================================
                 
                 ed_amount = st.number_input("金额 (元)", value=float(row_data['金额']))
                 ed_person = st.text_input("经手报销人", str(row_data['经手人']))
@@ -351,7 +347,7 @@ if current_role == "admin":
                 st.success("🎉 新执事信息成功录入大盘！")
                 st.rerun()
 
-        st.markdown("##### 👥 执事账号现存名册控制（支持密码重置与“一键拉黑”）")
+        st.markdown("##### 👥 执事账号现存名册控制")
         for r_key, u_list in st.session_state.user_registry.items():
             st.markdown(f"**岗位大类：{r_key}**")
             for idx, user in enumerate(u_list):
@@ -385,7 +381,7 @@ elif current_role == "volunteer":
                 if v_name and v_phone:
                     st.session_state.vol_active_name = v_name
                     st.session_state.vol_active_phone = v_phone
-                    append_audit_log("volunteer", v_name, f"义工认证登台，绑定手记物理线索：{v_phone}")
+                    append_audit_log("volunteer", v_name, f"义工认证登台，绑定手机线索：{v_phone}")
                     st.rerun()
                 else:
                     st.error("❌ 姓名与手机号乃是责任划分的核心线索，请务必填写完整方可开盘！")
@@ -399,23 +395,20 @@ elif current_role == "volunteer":
             v_date = st.date_input("1. 发生日期", date.today())
             v_nature = st.radio("2. 确定资财收支属性", ["信众随喜捐赠类收入", "观内场所日常维护/小额办公支出"], horizontal=True)
             
-            # ==============================================================================
-            # 🛠️ 义工快捷记账模块：确保严格精准地对应新科目的前两级大类
-            # ==============================================================================
+            # 🛠️ 义工账台严格联动：根据收支大类自动锁死父要素，不给资产类科目越界的机会
             if "收入" in v_nature:
                 el_auto = "收入类"
-                c1_auto = "4001 功德捐赠收入——非限定性"
+                c1_auto = "4001 功功德捐赠收入——非限定性"
             else:
                 el_auto = "支出类"
                 c1_auto = "5201 管理费用"
                 
             opts = ACCOUNTING_STRUCTURE[el_auto][c1_auto]
             v_c2 = st.selectbox("3. 选择合规对应的二级子目", opts)
-            # ==============================================================================
             
             v_amount = st.number_input("4. 资财变动金额 (元)", min_value=0.0, step=10.0)
             v_memo = st.text_area("5. 录入详细说明与疏文摘要")
-            v_file = st.file_uploader("6. 上传原始小票/法务功德单据据存", type=["jpg", "png", "pdf"])
+            v_file = st.file_uploader("6. 上传原始小票/法务功功德单据据存", type=["jpg", "png", "pdf"])
 
             if st.form_submit_button("🔥 提交入库并触发系统自编号归档", use_container_width=True):
                 if not v_memo:
@@ -507,24 +500,24 @@ else:
                 f_date = st.date_input("1. 会计记账日期", date.today())
                 
                 # ==============================================================================
-                # 🛠️ 财务人员与住持账户：彻底解决资产类串行显示问题的多级严格下拉联动
+                # 🛠️ 财务/住持核算联动逻辑：利用 Python 字典彻底切断资产类越界混杂的可能
                 # ==============================================================================
                 f_el = st.selectbox("2. 选择合规会计要素", list(ACCOUNTING_STRUCTURE.keys()), key="pro_el")
                 
-                # 依据当前选定的要素大类动态抓取一级科目，不再混淆
+                # 强行限定一级科目的可选项只有在上面选定的“要素大类”中才能被渲染
                 c1_opts = list(ACCOUNTING_STRUCTURE[f_el].keys())
                 f_c1 = st.selectbox("3. 一级科目(对应要素)", c1_opts, key="pro_c1")
                 
-                # 依据当前选定的要素大类 + 一级科目，精准定位明细二级科目
+                # 二级明细科目根据选中的一级科目进一步进行过滤锁定
                 c2_opts = ACCOUNTING_STRUCTURE[f_el][f_c1]
                 f_c2 = st.selectbox("4. 二级明细科目", c2_opts, key="pro_c2")
                 # ==============================================================================
 
             with col_core2:
                 f_amount = st.number_input("5. 发生金额 (元)", min_value=0.0, step=100.0)
-                f_person = st.text_input("6. 功德主 / 经办解批报销人")
+                f_person = st.text_input("6. 功功德主 / 经办解批报销人")
                 f_file = st.file_uploader("7. 挂载标准原始会计档案凭证", type=["jpg", "png", "pdf"])
-                f_memo = st.text_area("8. 账目发生之详细情况/功德事项摘要")
+                f_memo = st.text_area("8. 账目发生之详细情况/功功德事项摘要")
 
             # 特定科目（如业务招待费）的特别内控补充字段
             is_reception = ("接待" in f_c2 or "招待" in f_c2)
@@ -549,7 +542,6 @@ else:
 
                     f_id = f"HT-ACC-{datetime.now().strftime('%Y%m%d')}-{random.randint(1000,9999)}"
                     
-                    # 规则拦截：只要要素大类是支出类且金额大于等于一万元，进入审批流
                     if f_el == "支出类" and float(f_amount) >= 10000.0:
                         app_status = "等待住持审批"
                     else:
@@ -570,7 +562,7 @@ else:
                         st.success(f"🎉 财务总账登载成功！资产证券原始编号：`{assigned_name}`")
                     st.rerun()
 
-    # --- 标签 2：历史明细账档案馆（完全保留原有高级多选/全选/打包ZIP导出等功能） ---
+    # --- 标签 2：历史明细账档案馆 ---
     with tabs[1]:
         st.markdown("#### 🔍 历史全量明细账目及智能筛选检索台")
         if st.session_state.ledger.empty:
@@ -599,7 +591,6 @@ else:
 
             st.markdown(f"📊 已为您过滤出 **{len(df_filtered)}** 条匹配的主题档案：")
             
-            # 高级勾选组件支持
             col_sel1, col_sel2 = st.columns([1, 4])
             select_all = col_sel1.checkbox("全选当前筛选的账目项", value=True)
             
@@ -620,14 +611,13 @@ else:
                     zip_data = make_zip_archive_selected(df_to_export)
                     st.download_button("📥 确定导出归档压缩包.zip", zip_data, file_name=f"昊天观账目凭证归档_{datetime.now().strftime('%Y%m%d%H%M%S')}.zip", mime="application/zip", use_container_width=True)
 
-    # --- 标签 3：财务报表大盘（完全保留AI智能变动分析与导出） ---
+    # --- 标签 3：财务报表大盘 ---
     with tabs[2]:
         st.markdown("#### 📜 昊天观标准财务报表中心")
         rep_type = st.radio("报表周期类型切换", ["月度报表 (Monthly)", "季度报表 (Quarterly)", "年度报表 (Annual)"], horizontal=True)
         
         st.markdown(f"##### ⏳ 2026年度财务数据平衡表 ({rep_type})")
         
-        # 计算三大核心指标
         rev_total = st.session_state.ledger[st.session_state.ledger['会计要素'] == '收入类']['金额'].sum()
         exp_total = st.session_state.ledger[st.session_state.ledger['会计要素'] == '支出类']['金额'].sum()
         surplus = rev_total - exp_total
@@ -637,7 +627,6 @@ else:
         m_col2.metric("💸 累计总业务支出 (Expenses)", f"￥{exp_total:,.2f}")
         m_col3.metric("🪙 本期收支净结余 (Net Surplus)", f"￥{surplus:,.2f}")
         
-        # 导出 Excel 形式
         excel_rep = io.BytesIO()
         with pd.ExcelWriter(excel_rep, engine='openpyxl') as wr:
             st.session_state.ledger.to_excel(wr, index=False, sheet_name="全量科目级发生额明细")
@@ -649,9 +638,9 @@ else:
             st.success(f"🤖 **AI大盘解析诊断**：本期账目结构健康度良好，收支净留存 ￥{surplus:,.2f} 元。随喜随缘功德结存表现良好，能够充分保障场所基础运营修缮。")
         else:
             st.error(f"🤖 **AI大盘解析诊断**：当前周期内支出规模高于进项净流入（净结余出现红字 ￥{surplus:,.2f} 元）。建议严格把控文物及建筑修缮大额支出节奏，非必要活动暂缓列支。")
-        st.info("💡 **合规化运营建议**：严格依照《宗教活动场所财务监督管理办法》要求，定期向登记管理机关报送本期财务报表，并对信众公开功德款项随喜流向疏文，保持非营利法度透明。")
+        st.info("💡 **合规化运营建议**：严格依照《宗教活动场所财务监督管理办法》要求，定期向登记管理机关报送本期财务报表，并对信众公开功功德款项随喜流向疏文，保持非营利法度透明。")
 
-    # --- 标签 4：借款/贷款管理界面（完全保留原有合同上传、AI自动扫描提示与审核流） ---
+    # --- 标签 4：借款/贷款管理界面 ---
     with tabs[3]:
         st.markdown("#### 🪵 场所资财借贷与长期债务偿付风险追踪天盘")
         
